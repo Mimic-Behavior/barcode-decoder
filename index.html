@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="/vite.svg"
+        />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        />
+        <title>barcode-detector</title>
+    </head>
+    <body>
+        <div class="demo">
+            <video
+                class="demo__video"
+                data-id="video"
+            ></video>
+            <div class="demo__controls">
+                <button
+                    class="demo__control-button"
+                    data-id="button-start"
+                >
+                    Start
+                </button>
+                <button
+                    class="demo__control-button"
+                    data-id="button-pause"
+                >
+                    Pause
+                </button>
+                <button
+                    class="demo__control-button"
+                    data-id="button-stop"
+                >
+                    Stop
+                </button>
+            </div>
+            <div class="demo__result">
+                <p
+                    class="demo__result-title"
+                    data-id="result-title"
+                >
+                    QR Code
+                </p>
+                <p
+                    class="demo__result-value"
+                    data-id="result-value"
+                ></p>
+            </div>
+        </div>
+        <script
+            type="module"
+            src="/src/main.ts"
+        ></script>
+    </body>
+</html>

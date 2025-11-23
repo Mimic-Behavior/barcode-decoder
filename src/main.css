@@ -1,0 +1,41 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+}
+
+.demo__video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
+.demo__control {
+    display: flex;
+    gap: 10px;
+}
+
+.demo__control-button {
+    display: block;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    background-color: #000;
+    color: #fff;
+    cursor: pointer;
+}
+
+.demo__result-title {
+    font-weight: 600;
+    font-size: 16px;
+    line-height: 18px;
+}
+
+.demo__result-value {
+    font-weight: 400;
+    font-size: 16px;
+    line-height: 18px;
+}
