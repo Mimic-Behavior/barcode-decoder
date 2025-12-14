@@ -1,4 +1,4 @@
-import QrScanner from './lib/qr-scanner'
+import BarcodeDecoder from './lib/barcode-decoder'
 
 const video = document.querySelector('video')
 
@@ -16,16 +16,16 @@ const resultTitle = document.querySelector('[data-id="result-title"]')
 const resultValue = document.querySelector('[data-id="result-value"]')
 
 if (video) {
-    const qrScanner = new QrScanner(
+    const barcodeDecoder = new BarcodeDecoder(
         video,
         (result) => {
             if (!resultTitle || !resultValue) {
                 return
             }
 
-            console.log('QrScanner: ', result)
+            console.log('BarcodeDecoder: ', result)
 
-            resultTitle.textContent = 'QR Code:'
+            resultTitle.textContent = 'Barcode:'
             resultValue.textContent = result.rawValue
         },
         {
@@ -44,12 +44,12 @@ if (video) {
     )
 
     buttonStart?.addEventListener('click', () => {
-        qrScanner.start()
+        barcodeDecoder.play()
     })
     buttonPause?.addEventListener('click', () => {
-        qrScanner.pause()
+        barcodeDecoder.pause()
     })
     buttonStop?.addEventListener('click', () => {
-        qrScanner.stop()
+        barcodeDecoder.stop()
     })
 }

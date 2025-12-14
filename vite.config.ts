@@ -3,8 +3,22 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
     build: {
+        copyPublicDir: false,
         lib: {
-            entry: path.resolve(__dirname, 'src/lib/qr-scanner.ts'),
+            entry: path.resolve(__dirname, 'src/lib/barcode-decoder.ts'),
+            formats: ['es'],
+        },
+        rollupOptions: {
+            output: {
+                entryFileNames: '[name].js',
+            },
+        },
+    },
+    worker: {
+        rollupOptions: {
+            output: {
+                entryFileNames: '[name].js',
+            },
         },
     },
 })

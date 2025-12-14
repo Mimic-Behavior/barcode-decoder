@@ -1,22 +1,11 @@
 {
-    "compilerOptions": {
-        "allowImportingTsExtensions": true,
-        "erasableSyntaxOnly": true,
-        "lib": ["ES2022", "DOM", "DOM.Iterable"],
-        "module": "ESNext",
-        "moduleDetection": "force",
-        "moduleResolution": "bundler",
-        "noEmit": true,
-        "noFallthroughCasesInSwitch": true,
-        "noUncheckedSideEffectImports": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
-        "skipLibCheck": true,
-        "strict": true,
-        "target": "ES2022",
-        "types": ["vite/client"],
-        "useDefineForClassFields": true,
-        "verbatimModuleSyntax": true
-    },
-    "include": ["src"]
+    "files": [],
+    "references": [
+        {
+            "path": "./tsconfig.app.json"
+        },
+        {
+            "path": "./tsconfig.node.json"
+        }
+    ]
 }

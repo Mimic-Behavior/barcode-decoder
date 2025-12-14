@@ -1,7 +1,7 @@
 import jsQR from 'jsqr'
 
+import type { DecodeData, WorkerRequest, WorkerResponse } from './barcode-decoder.types'
 import type { BarcodeDetector, DetectedBarcode } from './barcode-detector.type'
-import type { DecodeData, WorkerRequest, WorkerResponse } from './qr-scanner.type'
 
 let barcodeDetector: BarcodeDetector | null = null
 
@@ -74,8 +74,8 @@ function isBarcodeDetectorAvailable(worker: Worker): worker is { BarcodeDetector
  * Listen for messages from the main thread
  * @param event - The event
  */
-worker.addEventListener('message', async ({ data: { data, id } }: MessageEvent<WorkerRequest>) => {
-    const response = { data: null, id } as WorkerResponse
+worker.addEventListener('message', async ({ data: { data, uuid } }: MessageEvent<WorkerRequest>) => {
+    const response = { data: null, uuid } as WorkerResponse
 
     try {
         if (data) {
