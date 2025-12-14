@@ -1,4 +1,4 @@
-import BarcodeDecoder from './lib/barcode-decoder'
+import BarcodeScanner from './lib/barcode-scanner'
 
 const video = document.querySelector('video')
 
@@ -16,40 +16,43 @@ const resultTitle = document.querySelector('[data-id="result-title"]')
 const resultValue = document.querySelector('[data-id="result-value"]')
 
 if (video) {
-    const barcodeDecoder = new BarcodeDecoder(
-        video,
-        (result) => {
+    const barcodeScanner = new BarcodeScanner({
+        onDecode: (result) => {
             if (!resultTitle || !resultValue) {
                 return
             }
 
-            console.log('BarcodeDecoder: ', result)
-
-            resultTitle.textContent = 'Barcode:'
             resultValue.textContent = result.rawValue
         },
-        {
-            debug: true,
-            facingMode: 'environment',
-            onDecodeError: (error) => {
-                if (!resultTitle || !resultValue) {
-                    return
-                }
+        onDecodeError: (error) => {
+            if (!resultTitle || !resultValue) {
+                return
+            }
 
-                resultTitle.textContent = 'Error: '
-                resultValue.textContent = error
+            resultValue.textContent = error
+        },
+        options: {
+            debug: true,
+            scanArea: (video) => {
+                return {
+                    height: video.videoHeight,
+                    width: video.videoWidth,
+                    x: 0,
+                    y: 0,
+                }
             },
             scanRate: 24,
         },
-    )
+        video,
+    })
 
     buttonStart?.addEventListener('click', () => {
-        barcodeDecoder.play()
+        barcodeScanner.start()
     })
     buttonPause?.addEventListener('click', () => {
-        barcodeDecoder.pause()
+        barcodeScanner.pause()
     })
     buttonStop?.addEventListener('click', () => {
-        barcodeDecoder.stop()
+        barcodeScanner.stop()
     })
 }

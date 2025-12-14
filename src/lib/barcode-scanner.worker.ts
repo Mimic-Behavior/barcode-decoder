@@ -1,7 +1,7 @@
 import jsQR from 'jsqr'
 
-import type { DecodeData, WorkerRequest, WorkerResponse } from './barcode-decoder.types'
 import type { BarcodeDetector, DetectedBarcode } from './barcode-detector.type'
+import type { DecodeData, WorkerRequest, WorkerResponse } from './barcode-scanner.types'
 
 let barcodeDetector: BarcodeDetector | null = null
 
