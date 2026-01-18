@@ -1,7 +1,7 @@
 import jsQR from 'jsqr'
 
 import type { BarcodeDetector, DetectedBarcode } from './barcode-detector.type'
-import type { DecodeData, WorkerRequest, WorkerResponse } from './barcode-scanner.types'
+import type { WorkerRequest, WorkerResponse } from './barcode-scanner.types'
 
 let barcodeDetector: BarcodeDetector | null = null
 
@@ -12,13 +12,13 @@ const worker = self as unknown as Worker
  * @param data - The data to decode
  * @returns The detected barcode
  */
-async function decode(data: DecodeData): Promise<DetectedBarcode | null> {
+async function decode(imageData: ImageData): Promise<DetectedBarcode | null> {
     if (!isBarcodeDetectorAvailable(worker)) {
-        return decodeFallback(data)
+        return decodeFallback(imageData)
     }
 
     const detector = getBarcodeDetector(worker)
-    const barcodes = await detector.detect(data.imageData)
+    const barcodes = await detector.detect(imageData)
 
     return barcodes[0]
 }
@@ -28,15 +28,15 @@ async function decode(data: DecodeData): Promise<DetectedBarcode | null> {
  * @param data - The data to decode
  * @returns The detected barcode
  */
-function decodeFallback(data: DecodeData): DetectedBarcode | null {
-    const result = jsQR(data.imageData, data.imageWidth, data.imageHeight)
+function decodeFallback(imageData: ImageData): DetectedBarcode | null {
+    const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' })
 
     if (!result) {
         return null
     }
 
     return {
-        boundingBox: new DOMRectReadOnly(0, 0, data.imageWidth, data.imageHeight),
+        boundingBox: new DOMRectReadOnly(0, 0, imageData.width, imageData.height),
         cornerPoints: [
             result.location.topLeftCorner,
             result.location.topRightCorner,

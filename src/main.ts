@@ -1,6 +1,8 @@
 import BarcodeScanner from './lib/barcode-scanner'
+import './main.css'
 
-const video = document.querySelector('video')
+const video = document.querySelector<HTMLVideoElement>('[data-id="video"]')
+const videoOverlay = document.querySelector<HTMLDivElement>('[data-id="video-overlay"]')
 
 /**
  * Get the control elements
@@ -22,7 +24,9 @@ if (video) {
                 return
             }
 
-            resultValue.textContent = result.rawValue
+            // barcodeScanner.pause()
+
+            resultValue.textContent = result
         },
         onDecodeError: (error) => {
             if (!resultTitle || !resultValue) {
@@ -32,18 +36,48 @@ if (video) {
             resultValue.textContent = error
         },
         options: {
+            // calcScanArea: (video) => {
+            //     console.log(video.videoWidth, video.videoHeight)
+
+            //     return {
+            //         height: video.videoHeight,
+            //         width: video.videoWidth,
+            //         x: 0,
+            //         y: 0,
+            //     }
+            // },
             debug: true,
-            scanArea: (video) => {
-                return {
-                    height: video.videoHeight,
-                    width: video.videoWidth,
-                    x: 0,
-                    y: 0,
-                }
-            },
             scanRate: 24,
         },
         video,
+    })
+
+    window.addEventListener('barcode-scanner:decode-frame', (event) => {
+        if (!(event instanceof CustomEvent) || !event.detail || !event.detail.imageData) {
+            return
+        }
+
+        const { imageData } = event.detail as { imageData: ImageData }
+
+        const canvas = document.createElement('canvas')
+        canvas.width = imageData.width
+        canvas.height = imageData.height
+        canvas.getContext('2d')?.putImageData(imageData, 0, 0)
+
+        const img = document.querySelector<HTMLImageElement>('[data-id="decode-frame-image"]')
+        if (img) {
+            img.src = canvas.toDataURL()
+        } else {
+            const img = document.createElement('img')
+            img.dataset.id = 'decode-frame-image'
+            img.style.position = 'absolute'
+            img.style.top = '0'
+            img.style.right = '0'
+            img.style.width = `${imageData.width}px`
+            img.style.height = `${imageData.height}px`
+            img.src = canvas.toDataURL()
+            document.body?.appendChild(img)
+        }
     })
 
     buttonStart?.addEventListener('click', () => {
