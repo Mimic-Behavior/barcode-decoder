@@ -2,7 +2,6 @@ import BarcodeScanner from './lib/barcode-scanner'
 import './main.css'
 
 const video = document.querySelector<HTMLVideoElement>('[data-id="video"]')
-const videoOverlay = document.querySelector<HTMLDivElement>('[data-id="video-overlay"]')
 
 /**
  * Get the control elements

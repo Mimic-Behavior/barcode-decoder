@@ -15,6 +15,7 @@ class BarcodeScanner {
     private onDecode: (result: string, area: Point2D[]) => void
     private onDecodeError?: (error: string) => void
     private requestFrame: (callback: () => void) => number
+    private resizeObserver: ResizeObserver
     private scanArea: { height: number; width: number; x: number; y: number }
     private scanRate: number
     private video: HTMLVideoElement
@@ -38,15 +39,15 @@ class BarcodeScanner {
         }
         video: HTMLVideoElement
     }) {
-        if (!(video instanceof HTMLVideoElement)) {
+        if (video && !(video instanceof HTMLVideoElement)) {
             throw new Error('video is not a HTMLVideoElement')
         }
 
-        if (!(onDecode instanceof Function)) {
+        if (onDecode && !(onDecode instanceof Function)) {
             throw new Error('onDecode is not a function')
         }
 
-        if (!(onDecodeError instanceof Function)) {
+        if (onDecodeError && !(onDecodeError instanceof Function)) {
             throw new Error('onDecodeError is not a function')
         }
 
@@ -85,12 +86,11 @@ class BarcodeScanner {
         this.video.muted = true
         this.video.playsInline = true
 
-        const resizeObserver = new ResizeObserver(() => {
+        this.resizeObserver = new ResizeObserver(() => {
             this.scanArea = this.getScanArea(this.video)
             this.render()
         })
-
-        resizeObserver.observe(this.video)
+        this.resizeObserver.observe(this.video)
 
         /**
          * Setup worker
@@ -103,6 +103,7 @@ class BarcodeScanner {
             throw new Error('Invalid decode data')
         }
 
+        // TODO: Использовать другой метод генерации
         const requestId = crypto.randomUUID()
 
         return new Promise((res, rej) => {
@@ -140,6 +141,7 @@ class BarcodeScanner {
         }
 
         await this.stop()
+        this.resizeObserver.disconnect()
         this.worker.terminate()
         this.isDestroyed = true
     }
@@ -160,6 +162,93 @@ class BarcodeScanner {
             return true
         } catch {
             return false
+        }
+    }
+
+    public getScanArea(video: HTMLVideoElement) {
+        const size = Math.round((2 / 3) * Math.min(video.videoWidth, video.videoHeight))
+
+        return {
+            height: size,
+            width: size,
+            x: Math.round((video.videoWidth - size) / 2),
+            y: Math.round((video.videoHeight - size) / 2),
+        }
+    }
+
+    public getScanAreaRealPosition(scanArea: { height: number; width: number; x: number; y: number }) {
+        const computedStyle = window.getComputedStyle(this.video)
+        const isMirrored = /scaleX\(-1\)/.test(this.video.style.transform)
+        const objectFit = computedStyle.objectFit
+        const objectPosition = computedStyle.objectPosition
+        const elementOffsetX = this.video.offsetLeft
+        const elementOffsetY = this.video.offsetTop
+        const elementHeight = this.video.offsetHeight
+        const elementWidth = this.video.offsetWidth
+        const elementAspectRatio = elementWidth / elementHeight
+        const videoHeight = this.video.videoHeight
+        const videoWidth = this.video.videoWidth
+        const videoAspectRatio = videoWidth / videoHeight
+        const areaWidth = scanArea.width || videoWidth
+        const areaHeight = scanArea.height || videoHeight
+        const areaX = scanArea.x || 0
+        const areaY = scanArea.y || 0
+
+        let scaledHeight: number
+        let scaledWidth: number
+
+        switch (objectFit) {
+            case 'contain':
+            case 'cover': {
+                const limitedByHeight =
+                    objectFit === 'contain'
+                        ? videoAspectRatio < elementAspectRatio
+                        : videoAspectRatio > elementAspectRatio
+                scaledHeight = limitedByHeight ? elementHeight : elementWidth / videoAspectRatio
+                scaledWidth = limitedByHeight ? elementHeight * videoAspectRatio : elementWidth
+                break
+            }
+            case 'none': {
+                scaledHeight = videoHeight
+                scaledWidth = videoWidth
+                break
+            }
+            case 'scale-down': {
+                const limitedByHeight = videoAspectRatio < elementAspectRatio
+                scaledHeight = Math.min(limitedByHeight ? elementWidth / videoAspectRatio : elementHeight, videoHeight)
+                scaledWidth = Math.min(limitedByHeight ? elementHeight * videoAspectRatio : elementWidth, videoWidth)
+                break
+            }
+            default: {
+                scaledHeight = elementHeight
+                scaledWidth = elementWidth
+                break
+            }
+        }
+
+        // prettier-ignore
+        const [
+            positionX,
+            positionY
+        ] = objectPosition
+            .split(' ')
+            .map((part, index) =>
+                part.endsWith('%')
+                    ? ((index === 0 ? elementWidth - scaledWidth : elementHeight - scaledHeight) * parseFloat(part)) /
+                      100
+                    : parseFloat(part),
+            )
+
+        const areaOffsetX = ((isMirrored ? areaX : videoWidth - areaX - areaWidth) / videoWidth) * scaledWidth
+        const areaOffsetY = (areaY / videoHeight) * scaledHeight
+        const scaleX = scaledWidth / videoWidth
+        const scaleY = scaledHeight / videoHeight
+
+        return {
+            height: areaHeight * scaleY,
+            width: areaWidth * scaleX,
+            x: elementOffsetX + (isMirrored ? positionX : elementWidth - positionX - scaledWidth) + areaOffsetX,
+            y: elementOffsetY + positionY + areaOffsetY,
         }
     }
 
@@ -266,6 +355,7 @@ class BarcodeScanner {
                 )
             }
 
+            this.render()
             this.decode(imageData)
                 .then((result) => {
                     if (!result) {
@@ -291,95 +381,8 @@ class BarcodeScanner {
         })
     }
 
-    private getScanArea(video: HTMLVideoElement) {
-        const size = Math.round((2 / 3) * Math.min(video.videoWidth, video.videoHeight))
-
-        return {
-            height: size,
-            width: size,
-            x: Math.round((video.videoWidth - size) / 2),
-            y: Math.round((video.videoHeight - size) / 2),
-        }
-    }
-
-    private getScanAreaPosition() {
-        const computedStyle = window.getComputedStyle(this.video)
-        const isMirrored = computedStyle.transform === 'matrix(-1, 0, 0, 1, 0, 0)'
-        const objectFit = computedStyle.objectFit
-        const objectPosition = computedStyle.objectPosition
-        const elementOffsetX = this.video.offsetLeft
-        const elementOffsetY = this.video.offsetTop
-        const elementHeight = this.video.offsetHeight
-        const elementWidth = this.video.offsetWidth
-        const elementAspectRatio = elementWidth / elementHeight
-        const videoHeight = this.video.videoHeight
-        const videoWidth = this.video.videoWidth
-        const videoAspectRatio = videoWidth / videoHeight
-        const areaWidth = this.scanArea.width || videoWidth
-        const areaHeight = this.scanArea.height || videoHeight
-        const areaX = this.scanArea.x || 0
-        const areaY = this.scanArea.y || 0
-
-        let scaledHeight: number
-        let scaledWidth: number
-
-        switch (objectFit) {
-            case 'contain':
-            case 'cover': {
-                const limitedByHeight =
-                    objectFit === 'contain'
-                        ? videoAspectRatio < elementAspectRatio
-                        : videoAspectRatio > elementAspectRatio
-                scaledHeight = limitedByHeight ? elementHeight : elementWidth / videoAspectRatio
-                scaledWidth = limitedByHeight ? elementHeight * videoAspectRatio : elementWidth
-                break
-            }
-            case 'none': {
-                scaledHeight = videoHeight
-                scaledWidth = videoWidth
-                break
-            }
-            case 'scale-down': {
-                const limitedByHeight = videoAspectRatio < elementAspectRatio
-                scaledHeight = Math.min(limitedByHeight ? elementWidth / videoAspectRatio : elementHeight, videoHeight)
-                scaledWidth = Math.min(limitedByHeight ? elementHeight * videoAspectRatio : elementWidth, videoWidth)
-                break
-            }
-            default: {
-                scaledHeight = elementHeight
-                scaledWidth = elementWidth
-                break
-            }
-        }
-
-        // prettier-ignore
-        const [
-            positionX,
-            positionY
-        ] = objectPosition
-            .split(' ')
-            .map((part, index) =>
-                part.endsWith('%')
-                    ? ((index === 0 ? elementWidth - scaledWidth : elementHeight - scaledHeight) * parseFloat(part)) /
-                      100
-                    : parseFloat(part),
-            )
-
-        const areaOffsetX = ((isMirrored ? areaX : videoWidth - areaX - areaWidth) / videoWidth) * scaledWidth
-        const areaOffsetY = (areaY / videoHeight) * scaledHeight
-        const scaleX = scaledWidth / videoWidth
-        const scaleY = scaledHeight / videoHeight
-
-        return {
-            height: areaHeight * scaleY,
-            width: areaWidth * scaleX,
-            x: elementOffsetX + (isMirrored ? positionX : elementWidth - positionX - scaledWidth) + areaOffsetX,
-            y: elementOffsetY + positionY + areaOffsetY,
-        }
-    }
-
     private render() {
-        const area = this.getScanAreaPosition()
+        const area = this.getScanAreaRealPosition(this.scanArea)
 
         document.documentElement.style.setProperty('--barcode-scanner-area-height', `${area.height}px`)
         document.documentElement.style.setProperty('--barcode-scanner-area-width', `${area.width}px`)
