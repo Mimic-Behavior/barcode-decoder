@@ -93,7 +93,6 @@ class BarcodeScanner {
 
         this.resizeObserver = new ResizeObserver(() => {
             this.scanArea = this.getScanArea(this.video)
-            this.render()
         })
         this.resizeObserver.observe(this.video)
 
@@ -196,7 +195,7 @@ class BarcodeScanner {
         }
     }
 
-    public getScanAreaRealPosition(scanArea: { height: number; width: number; x: number; y: number }) {
+    public getScanAreaPosition(scanArea: { height: number; width: number; x: number; y: number }) {
         const computedStyle = window.getComputedStyle(this.video)
         const isMirrored = /scaleX\(-1\)/.test(this.video.style.transform)
         const objectFit = computedStyle.objectFit
@@ -335,7 +334,6 @@ class BarcodeScanner {
         this.video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'none'
         this.videoActive = true
         this.videoPaused = false
-        this.render()
         this.decodeFrame()
     }
 
@@ -406,7 +404,6 @@ class BarcodeScanner {
                 )
             }
 
-            this.render()
             this.decode(imageData)
                 .then((result) => {
                     if (!result) {
@@ -430,15 +427,6 @@ class BarcodeScanner {
                     this.decodeFrame()
                 })
         })
-    }
-
-    private render() {
-        const area = this.getScanAreaRealPosition(this.scanArea)
-
-        document.documentElement.style.setProperty('--barcode-scanner-area-height', `${area.height}px`)
-        document.documentElement.style.setProperty('--barcode-scanner-area-width', `${area.width}px`)
-        document.documentElement.style.setProperty('--barcode-scanner-area-x', `${area.x}px`)
-        document.documentElement.style.setProperty('--barcode-scanner-area-y', `${area.y}px`)
     }
 }
 
