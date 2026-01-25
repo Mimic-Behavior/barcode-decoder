@@ -1,5 +1,5 @@
-import type { DetectedBarcode, Point2D } from './barcode-detector.type'
-import type { WorkerRequest, WorkerResponse } from './barcode-scanner.types'
+import type { DetectedBarcode } from './barcode-detector.type'
+import type { OnDecode, OnDecodeError, ScanArea, WorkerRequest, WorkerResponse } from './barcode-scanner.types'
 
 class BarcodeScanner {
     private canvas: HTMLCanvasElement
@@ -7,17 +7,15 @@ class BarcodeScanner {
     private debug?: boolean
     private decodeFrameRequestTimestamp: number
     private decodeTimeout: number
-    private facingMode: 'environment' | 'user'
-    private hasHighlightCodeArea: boolean
-    private hasHighlightScanArea: boolean
     private isDecodeFrameProcessed: boolean
     private isDestroyed: boolean
-    private onDecode: (result: string, area: Point2D[]) => void
-    private onDecodeError?: (error: string) => void
+    private onDecode: OnDecode
+    private onDecodeError?: OnDecodeError
     private onVisibilityChange: () => void
     private requestFrame: (callback: () => void) => number
     private resizeObserver: ResizeObserver
-    private scanArea: { height: number; width: number; x: number; y: number }
+    private resumeOnVisibilityChange: boolean
+    private scanArea: ScanArea
     private scanRate: number
     private video: HTMLVideoElement
     private videoActive: boolean
@@ -30,14 +28,12 @@ class BarcodeScanner {
         options,
         video,
     }: {
-        onDecode: (data: string, area?: Point2D[]) => void
-        onDecodeError?: (error: string) => void
+        onDecode: OnDecode
+        onDecodeError?: OnDecodeError
         options?: {
-            calcScanArea?: (video: HTMLVideoElement) => { height: number; width: number; x: number; y: number }
+            calcScanArea?: (video: HTMLVideoElement) => ScanArea
             debug?: boolean
             decodeTimeout?: number
-            highlightCodeArea?: boolean
-            highlightScanArea?: boolean
             scanRate?: number
         }
         video: HTMLVideoElement
@@ -65,7 +61,6 @@ class BarcodeScanner {
         this.canvasContext = context
         this.debug = options?.debug
         this.decodeTimeout = options?.decodeTimeout ?? 1000
-        this.facingMode = 'environment'
         this.isDecodeFrameProcessed = false
         this.isDestroyed = false
         this.onDecode = onDecode
@@ -74,8 +69,7 @@ class BarcodeScanner {
             ? video.requestVideoFrameCallback.bind(video)
             : requestAnimationFrame
         this.decodeFrameRequestTimestamp = performance.now()
-        this.hasHighlightCodeArea = options?.highlightCodeArea ?? false
-        this.hasHighlightScanArea = options?.highlightScanArea ?? false
+        this.resumeOnVisibilityChange = false
         this.scanArea = this.getScanArea(video)
         this.scanRate = options?.scanRate ?? 24
 
@@ -98,9 +92,15 @@ class BarcodeScanner {
 
         this.onVisibilityChange = () => {
             if (document.visibilityState === 'hidden') {
+                if (this.videoActive && this.videoPaused === false) {
+                    this.resumeOnVisibilityChange = true
+                }
+
                 this.pause()
             } else {
-                if (this.videoPaused) {
+                if (this.resumeOnVisibilityChange) {
+                    this.resumeOnVisibilityChange = false
+
                     this.start()
                 }
             }
@@ -114,13 +114,13 @@ class BarcodeScanner {
         this.worker = new Worker(new URL('./barcode-scanner.worker.ts', import.meta.url), { type: 'module' })
     }
 
-    public async decode(imageData: ImageData): Promise<DetectedBarcode | null> {
+    public decode(imageData: ImageData): Promise<DetectedBarcode | null> {
         if (!(imageData instanceof ImageData)) {
             throw new Error('Invalid decode data')
         }
 
         // TODO: Использовать другой метод генерации
-        const requestId = crypto.randomUUID()
+        const requestId = `${performance.now()}-${Math.random().toString(36).slice(2)}`
 
         return new Promise((res, rej) => {
             let timeout: ReturnType<typeof setTimeout> = 0
@@ -184,7 +184,7 @@ class BarcodeScanner {
         }
     }
 
-    public getScanArea(video: HTMLVideoElement) {
+    public getScanArea(video: HTMLVideoElement): ScanArea {
         const size = Math.round((2 / 3) * Math.min(video.videoWidth, video.videoHeight))
 
         return {
@@ -195,7 +195,7 @@ class BarcodeScanner {
         }
     }
 
-    public getScanAreaPosition(scanArea: { height: number; width: number; x: number; y: number }) {
+    public getScanAreaPosition(scanArea: ScanArea = this.scanArea): ScanArea {
         const computedStyle = window.getComputedStyle(this.video)
         const isMirrored = /scaleX\(-1\)/.test(this.video.style.transform)
         const objectFit = computedStyle.objectFit
@@ -317,7 +317,11 @@ class BarcodeScanner {
             throw new Error('No camera access')
         }
 
-        if (this.video.srcObject instanceof MediaStream && this.video.paused) {
+        if (this.video.srcObject instanceof MediaStream && this.videoActive && this.videoPaused === false) {
+            return
+        }
+
+        if (this.video.srcObject instanceof MediaStream) {
             await this.video.play()
         } else {
             this.video.srcObject = await navigator.mediaDevices.getUserMedia({
@@ -329,7 +333,6 @@ class BarcodeScanner {
             await this.video.play()
         }
 
-        this.facingMode = facingMode
         this.scanArea = this.getScanArea(this.video)
         this.video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'none'
         this.videoActive = true
@@ -342,6 +345,7 @@ class BarcodeScanner {
             this.video.srcObject.getTracks().forEach((track) => track.stop())
         }
 
+        this.video.poster = ''
         this.video.srcObject = null
         this.videoActive = false
         this.videoPaused = false
@@ -405,21 +409,26 @@ class BarcodeScanner {
             }
 
             this.decode(imageData)
-                .then((result) => {
-                    if (!result) {
-                        return
-                    }
+                .then((data) => {
+                    if (data) {
+                        const cornerPointsX = data.cornerPoints.map((p) => p.x)
+                        const cornerPointsY = data.cornerPoints.map((p) => p.y)
 
-                    this.onDecode(
-                        result.rawValue,
-                        result.cornerPoints.map((point) => ({
-                            x: point.x + this.scanArea.x,
-                            y: point.y + this.scanArea.y,
-                        })),
-                    )
+                        this.onDecode(
+                            data.rawValue,
+                            this.getScanAreaPosition({
+                                height: Math.max(...cornerPointsY) - Math.min(...cornerPointsY),
+                                width: Math.max(...cornerPointsX) - Math.min(...cornerPointsX),
+                                x: Math.min(...cornerPointsX) + this.scanArea.x,
+                                y: Math.min(...cornerPointsY) + this.scanArea.y,
+                            }),
+                        )
+                    } else {
+                        this.onDecode(null)
+                    }
                 })
                 .catch(() => {
-                    this.onDecodeError?.('Decode error')
+                    this.onDecodeError?.()
                 })
                 .finally(() => {
                     this.isDecodeFrameProcessed = false

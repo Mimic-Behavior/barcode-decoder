@@ -2,6 +2,7 @@ import BarcodeScanner from './lib/barcode-scanner'
 import './main.css'
 
 const video = document.querySelector<HTMLVideoElement>('[data-id="video"]')
+const videoRenderer = document.querySelector<HTMLVideoElement>('[data-id="video-renderer"]')
 
 /**
  * Get the control elements
@@ -16,39 +17,38 @@ const buttonStop = document.querySelector('[data-id="button-stop"]')
 const resultTitle = document.querySelector('[data-id="result-title"]')
 const resultValue = document.querySelector('[data-id="result-value"]')
 
-if (video) {
+if (video && videoRenderer) {
     const barcodeScanner = new BarcodeScanner({
-        onDecode: (result) => {
+        onDecode: (data, area) => {
             if (!resultTitle || !resultValue) {
                 return
             }
 
-            // barcodeScanner.pause()
+            const scanAreaPosition = area ?? barcodeScanner.getScanAreaPosition()
 
-            resultValue.textContent = result
+            document.documentElement.style.setProperty('--barcode-scanner-area-x', `${scanAreaPosition.x}px`)
+            document.documentElement.style.setProperty('--barcode-scanner-area-y', `${scanAreaPosition.y}px`)
+            document.documentElement.style.setProperty('--barcode-scanner-area-width', `${scanAreaPosition.width}px`)
+            document.documentElement.style.setProperty('--barcode-scanner-area-height', `${scanAreaPosition.height}px`)
+
+            if (data) {
+                resultValue.textContent = data
+            } else {
+                resultValue.textContent = 'No data'
+            }
         },
-        onDecodeError: (error) => {
+        onDecodeError: () => {
             if (!resultTitle || !resultValue) {
                 return
             }
 
-            resultValue.textContent = error
+            resultValue.textContent = 'Decode error'
         },
         options: {
-            // calcScanArea: (video) => {
-            //     console.log(video.videoWidth, video.videoHeight)
-
-            //     return {
-            //         height: video.videoHeight,
-            //         width: video.videoWidth,
-            //         x: 0,
-            //         y: 0,
-            //     }
-            // },
             debug: true,
             scanRate: 24,
         },
-        video,
+        video: videoRenderer,
     })
 
     const canvas = document.createElement('canvas')
@@ -65,19 +65,15 @@ if (video) {
         canvas.height = imageData.height
         canvasContext?.putImageData(imageData, 0, 0)
 
-        const img = document.querySelector<HTMLImageElement>('[data-id="decode-frame-image"]')
+        const img = document.querySelector<HTMLImageElement>('[data-id="video-preview"]')
         if (img) {
             img.src = canvas.toDataURL()
         } else {
             const img = document.createElement('img')
-            img.dataset.id = 'decode-frame-image'
-            img.style.position = 'absolute'
-            img.style.top = '0'
-            img.style.right = '0'
-            img.style.width = `${imageData.width}px`
-            img.style.height = `${imageData.height}px`
+            img.classList.add('demo__video-preview')
             img.src = canvas.toDataURL()
-            document.body?.appendChild(img)
+            img.dataset.id = 'video-preview'
+            video.appendChild(img)
         }
     })
 

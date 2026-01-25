@@ -1,15 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
 * {
     box-sizing: border-box;
+    font-family: Inter, sans-serif;
 }
 
 body {
     margin: 0;
+    font-family: sans-serif;
+}
+
+.demo {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    align-items: center;
+    width: 100%;
+    padding: 32px;
 }
 
 .demo__video {
     position: relative;
     width: 512px;
     height: 512px;
+    overflow: hidden;
+    background-color: #000;
+    border-radius: 16px;
 }
 
 .demo__video-renderer {
@@ -32,9 +48,19 @@ body {
     transition-property: inset, width, height;
 }
 
+.demo__video-preview {
+    position: absolute;
+    inset: auto 16px 16px auto;
+    width: 128px;
+    height: 128px;
+    pointer-events: none;
+    background-color: #000;
+    border-radius: 16px;
+}
+
 .demo__control {
     display: flex;
-    gap: 10px;
+    gap: 16px;
 }
 
 .demo__control-button {

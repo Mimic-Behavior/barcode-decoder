@@ -15,10 +15,13 @@
     </head>
     <body>
         <div class="demo">
-            <div class="demo__video">
+            <div
+                class="demo__video"
+                data-id="video"
+            >
                 <video
                     class="demo__video-renderer"
-                    data-id="video"
+                    data-id="video-renderer"
                 ></video>
                 <div
                     class="demo__video-overlay"
@@ -46,16 +49,18 @@
                 </button>
             </div>
             <div class="demo__result">
-                <p
+                <span
                     class="demo__result-title"
                     data-id="result-title"
                 >
-                    Barcode
-                </p>
-                <p
+                    Decoded data:
+                </span>
+                <span
                     class="demo__result-value"
                     data-id="result-value"
-                ></p>
+                >
+                    No data
+                </span>
             </div>
         </div>
         <script
