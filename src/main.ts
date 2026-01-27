@@ -45,6 +45,16 @@ if (video && videoRenderer) {
             resultValue.textContent = 'Decode error'
         },
         options: {
+            calcScanArea(video) {
+                const size = Math.round((2 / 3) * Math.min(video.offsetWidth, video.offsetHeight))
+
+                return {
+                    height: size,
+                    width: size,
+                    x: Math.round((video.offsetWidth - size) / 2),
+                    y: Math.round((video.offsetHeight - size) / 2),
+                }
+            },
             debug: true,
             scanRate: 24,
         },

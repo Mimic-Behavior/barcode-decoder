@@ -21,8 +21,8 @@ body {
 
 .demo__video {
     position: relative;
-    width: 512px;
-    height: 512px;
+    width: 384px;
+    height: 768px;
     overflow: hidden;
     background-color: #000;
     border-radius: 16px;
@@ -37,7 +37,7 @@ body {
 
 .demo__video-overlay {
     position: absolute;
-    inset: var(--barcode-scanner-area-y) var(--barcode-scanner-area-x) auto auto;
+    inset: var(--barcode-scanner-area-y) auto auto var(--barcode-scanner-area-x);
     width: var(--barcode-scanner-area-width);
     height: var(--barcode-scanner-area-height);
     pointer-events: none;

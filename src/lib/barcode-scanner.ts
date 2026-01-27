@@ -2,6 +2,7 @@ import type { DetectedBarcode } from './barcode-detector.type'
 import type { OnDecode, OnDecodeError, ScanArea, WorkerRequest, WorkerResponse } from './barcode-scanner.types'
 
 class BarcodeScanner {
+    private calcScanArea: (video: HTMLVideoElement) => ScanArea
     private canvas: HTMLCanvasElement
     private canvasContext: CanvasRenderingContext2D
     private debug?: boolean
@@ -58,6 +59,7 @@ class BarcodeScanner {
             throw new Error('Failed to get canvas context')
         }
 
+        this.calcScanArea = options?.calcScanArea ?? this.getScanArea
         this.canvasContext = context
         this.debug = options?.debug
         this.decodeTimeout = options?.decodeTimeout ?? 1000
@@ -70,7 +72,7 @@ class BarcodeScanner {
             : requestAnimationFrame
         this.decodeFrameRequestTimestamp = performance.now()
         this.resumeOnVisibilityChange = false
-        this.scanArea = this.getScanArea(video)
+        this.scanArea = this.calcScanArea(video)
         this.scanRate = options?.scanRate ?? 24
 
         /**
@@ -86,7 +88,7 @@ class BarcodeScanner {
         this.videoPaused = false
 
         this.resizeObserver = new ResizeObserver(() => {
-            this.scanArea = this.getScanArea(this.video)
+            this.scanArea = this.calcScanArea(video)
         })
         this.resizeObserver.observe(this.video)
 
@@ -223,8 +225,14 @@ class BarcodeScanner {
                     objectFit === 'contain'
                         ? videoAspectRatio < elementAspectRatio
                         : videoAspectRatio > elementAspectRatio
-                scaledHeight = limitedByHeight ? elementHeight : elementWidth / videoAspectRatio
-                scaledWidth = limitedByHeight ? elementHeight * videoAspectRatio : elementWidth
+                // prettier-ignore
+                scaledHeight = limitedByHeight
+                    ? elementHeight
+                    : elementWidth / videoAspectRatio
+                // prettier-ignore
+                scaledWidth = limitedByHeight
+                    ? elementHeight * videoAspectRatio
+                    : elementWidth
                 break
             }
             case 'none': {
@@ -234,8 +242,20 @@ class BarcodeScanner {
             }
             case 'scale-down': {
                 const limitedByHeight = videoAspectRatio < elementAspectRatio
-                scaledHeight = Math.min(limitedByHeight ? elementWidth / videoAspectRatio : elementHeight, videoHeight)
-                scaledWidth = Math.min(limitedByHeight ? elementHeight * videoAspectRatio : elementWidth, videoWidth)
+                // prettier-ignore
+                scaledHeight = Math.min(
+                    limitedByHeight
+                        ? elementWidth / videoAspectRatio
+                        : elementHeight,
+                    videoHeight
+                )
+                // prettier-ignore
+                scaledWidth = Math.min(
+                    limitedByHeight
+                        ? elementHeight * videoAspectRatio
+                        : elementWidth,
+                    videoWidth
+                )
                 break
             }
             default: {
@@ -263,11 +283,24 @@ class BarcodeScanner {
         const scaleX = scaledWidth / videoWidth
         const scaleY = scaledHeight / videoHeight
 
+        // prettier-ignore
         return {
-            height: areaHeight * scaleY,
-            width: areaWidth * scaleX,
-            x: elementOffsetX + (isMirrored ? positionX : elementWidth - positionX - scaledWidth) + areaOffsetX,
-            y: elementOffsetY + positionY + areaOffsetY,
+            height: Math.min(
+                areaHeight * scaleY,
+                elementHeight,
+            ),
+            width: Math.min(
+                areaWidth * scaleX,
+                elementWidth,
+            ),
+            x: Math.max(
+                elementOffsetX + (isMirrored ? positionX : elementWidth - scaledWidth - positionX) + areaOffsetX,
+                0,
+            ),
+            y: Math.max(
+                elementOffsetY + positionY + areaOffsetY,
+                0,
+            ),
         }
     }
 
@@ -333,7 +366,7 @@ class BarcodeScanner {
             await this.video.play()
         }
 
-        this.scanArea = this.getScanArea(this.video)
+        this.scanArea = this.calcScanArea(this.video)
         this.video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'none'
         this.videoActive = true
         this.videoPaused = false
