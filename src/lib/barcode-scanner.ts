@@ -10,6 +10,7 @@ import type {
 import { convertToElementArea } from './utils'
 
 class BarcodeScanner {
+    // private barcodeDetector?: BarcodeDetector | BarcodeDetectorPonyfill
     private calcScanArea: (video: HTMLVideoElement) => ScanArea
     private canvas: HTMLCanvasElement
     private canvasContext: CanvasRenderingContext2D
@@ -42,6 +43,7 @@ class BarcodeScanner {
             calcScanArea?: (video: HTMLVideoElement) => ScanArea
             debug?: boolean
             decodeTimeout?: number
+            preferWorker?: boolean
             scanRate?: number
         }
         video: HTMLVideoElement
@@ -112,12 +114,34 @@ class BarcodeScanner {
 
         document.addEventListener('visibilitychange', this.onVisibilityChange)
 
-        /**
-         * Setup worker
-         */
         this.worker = new Worker(new URL('./barcode-scanner.worker.ts', import.meta.url), {
             type: 'module',
         })
+
+        // if (options?.preferWorker) {
+        //     this.worker = new Worker(new URL('./barcode-scanner.worker.ts', import.meta.url), {
+        //         type: 'module',
+        //     })
+        // } else {
+        //     const barcodeDetectorOptions: BarcodeDetectorOptions = { formats: ['qr_code'] }
+        //     if (isBarcodeDetectorAvailable(window)) {
+        //         this.barcodeDetector = new window.BarcodeDetector(barcodeDetectorOptions)
+        //     } else {
+        //         prepareZXingModule({
+        //             overrides: {
+        //                 locateFile(url, scriptDirectory) {
+        //                     if (url.endsWith('.wasm')) {
+        //                         return zxingUrl
+        //                     }
+
+        //                     return scriptDirectory + url
+        //                 },
+        //             },
+        //         })
+
+        //         this.barcodeDetector = new BarcodeDetectorPonyfill(barcodeDetectorOptions)
+        //     }
+        // }
     }
 
     public decode(imageData: ImageData): Promise<DetectedBarcode | null> {
