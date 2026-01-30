@@ -1,81 +1,78 @@
 import { createWatchable } from './create-watchable'
-import { getCameraAccess, getScanArea, type ScanArea, wait } from './utils'
+import { getCameraAccess, getScanArea, type ScanArea, translateAreaToVideoRender } from './utils'
 import { decode, install } from './worker'
 
-function createBarcodeScanner(
+type State = {
+    calcScanArea: (video: HTMLVideoElement) => ScanArea
+    canvas: HTMLCanvasElement
+    canvasContext: CanvasRenderingContext2D
+    decodeFrameTs: number
+    isDecodeFrameProcessed: boolean
+    isDestroyed: boolean
+    isVideoActive: boolean
+    isVideoPaused: boolean
+    requestFrame: (callback: () => void) => number
+    scanArea: ScanArea
+    scanRate: number
+    video: HTMLVideoElement
+    worker: null | Worker
+}
+
+async function createBarcodeScanner(
     video: HTMLVideoElement,
+
     {
         calcScanArea,
-        debug = false,
+        debug,
+        onDecodeFailure = () => {},
+        onDecodeSuccess = () => {},
+        setAreaDetectedVariables,
+        setAreaPositionVariables,
     }: {
         calcScanArea?: (video: HTMLVideoElement) => ScanArea
         debug?: boolean
+        onDecodeFailure?: () => void
+        onDecodeSuccess?: (data: string, area: ScanArea) => void
+        setAreaDetectedVariables?: boolean
+        setAreaPositionVariables?: boolean
     } = {},
 ) {
     if (!(video instanceof HTMLVideoElement)) {
         throw new Error('video is not a HTMLVideoElement')
     }
 
+    if (!(onDecodeSuccess instanceof Function)) {
+        throw new Error('onDecodeSuccess is not a function')
+    }
+
+    if (!(onDecodeFailure instanceof Function)) {
+        throw new Error('onDecodeFailure is not a function')
+    }
+
     const canvas = document.createElement('canvas')
     const canvasContext = canvas.getContext('2d', { willReadFrequently: true })
 
     if (!canvasContext) {
-        throw new Error('Failed to get canvas context')
+        throw new Error('canvas context is not supported')
     }
 
-    const { state, watch } = createWatchable<{
-        calcScanArea: (video: HTMLVideoElement) => ScanArea
-        canvas: HTMLCanvasElement
-        canvasContext: CanvasRenderingContext2D
-        debug: boolean
-        decodeFrameRequestTimestamp: number
-        facingMode: 'environment' | 'user'
-        isDecodeFrameProcessed: boolean
-        isDestroyed: boolean
-        isReady: boolean
-        isVideoActive: boolean
-        isVideoPaused: boolean
-        onDecodeFailure: () => void
-        onDecodeSuccess: (data: string, area: ScanArea) => void
-        requestFrame: (callback: () => void) => number
-        resumeOnVisibilityChange: boolean
-        scanArea: ScanArea
-        scanRate: number
-        video: HTMLVideoElement
-        worker: null | Worker
-    }>({
+    const { state, watch } = createWatchable<State>({
         calcScanArea: calcScanArea ?? getScanArea,
         canvas,
         canvasContext,
-        debug,
-        decodeFrameRequestTimestamp: performance.now(),
-        facingMode: 'environment',
+        decodeFrameTs: performance.now(),
         isDecodeFrameProcessed: false,
         isDestroyed: false,
-        isReady: false,
         isVideoActive: false,
         isVideoPaused: false,
-        onDecodeFailure: () => {},
-        onDecodeSuccess: () => {},
-        requestFrame: video.requestVideoFrameCallback
-            ? video.requestVideoFrameCallback.bind(video)
-            : requestAnimationFrame,
-        resumeOnVisibilityChange: false,
-        scanArea: {
-            height: 0,
-            width: 0,
-            x: 0,
-            y: 0,
-        },
+        requestFrame: video.requestVideoFrameCallback?.bind(video) ?? requestAnimationFrame,
+        scanArea: getScanArea(video),
         scanRate: 24,
         video,
         worker: null,
     })
 
-    install()
-        .then((worker) => (state.worker = worker))
-        .then(() => (import.meta.env.DEV ? wait(3000) : Promise.resolve()))
-        .then(() => (state.isReady = true))
+    state.worker = await install()
 
     state.video.autoplay = true
     state.video.disablePictureInPicture = true
@@ -83,58 +80,23 @@ function createBarcodeScanner(
     state.video.muted = true
     state.video.playsInline = true
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    function handleVisibilityChange() {
-        if (debug) {
-            console.log('barcode-scanner:handleVisibilityChange', document.visibilityState, state)
-        }
-
-        if (document.visibilityState === 'hidden') {
-            if (state.isVideoActive && state.isVideoPaused === false) {
-                state.resumeOnVisibilityChange = true
-
-                pause()
-            }
-        } else {
-            if (state.resumeOnVisibilityChange) {
-                state.resumeOnVisibilityChange = false
-
-                start(
-                    {
-                        facingMode: state.facingMode,
-                    },
-                    state.onDecodeSuccess,
-                    state.onDecodeFailure,
-                )
-            }
-        }
-    }
-
     function handleDecode(
         onDecodeSuccess: (data: string, area: ScanArea) => void,
         onDecodeFailure: () => void,
     ) {
-        if (debug) {
-            console.log('barcode-scanner:handleDecode', state, performance.now())
-        }
-
-        if (state.isDestroyed || state.isVideoActive === false || state.isVideoPaused) {
+        if (state.isDestroyed || state.isVideoActive === false) {
             return
         }
 
         state.requestFrame(() => {
             if (
-                // Skip if the worker is not ready
-                state.isReady === false ||
                 // Skip if the time since the last request frame is less than the scan rate
-                performance.now() - state.decodeFrameRequestTimestamp < 1000 / state.scanRate ||
+                performance.now() - state.decodeFrameTs < 1000 / state.scanRate ||
                 // Skip if the frame is already processed
                 state.isDecodeFrameProcessed ||
                 // Skip if the video is not ready
                 state.video.readyState <= 1
             ) {
-                state.decodeFrameRequestTimestamp = performance.now()
                 handleDecode(onDecodeSuccess, onDecodeFailure)
                 return
             }
@@ -142,6 +104,27 @@ function createBarcodeScanner(
             state.isDecodeFrameProcessed = true
 
             state.scanArea = state.calcScanArea(state.video)
+
+            if (setAreaPositionVariables) {
+                const renderArea = translateAreaToVideoRender(video, state.scanArea)
+                video.parentElement?.style.setProperty(
+                    '--barcode-scanner-area-height',
+                    `${renderArea.height}px`,
+                )
+                video.parentElement?.style.setProperty(
+                    '--barcode-scanner-area-width',
+                    `${renderArea.width}px`,
+                )
+                video.parentElement?.style.setProperty(
+                    '--barcode-scanner-area-x',
+                    `${renderArea.x}px`,
+                )
+                video.parentElement?.style.setProperty(
+                    '--barcode-scanner-area-y',
+                    `${renderArea.y}px`,
+                )
+            }
+
             state.canvas.height = state.scanArea.height
             state.canvas.width = state.scanArea.width
             state.canvasContext.clearRect(0, 0, state.canvas.width, state.canvas.height)
@@ -164,7 +147,7 @@ function createBarcodeScanner(
                 state.canvas.height,
             )
 
-            if (state.debug) {
+            if (debug) {
                 window.dispatchEvent(
                     new CustomEvent('barcode-scanner:decode-frame', {
                         detail: {
@@ -179,14 +162,50 @@ function createBarcodeScanner(
                     if (data) {
                         const cornerPointsX = data.cornerPoints.map((p) => p.x)
                         const cornerPointsY = data.cornerPoints.map((p) => p.y)
-
-                        onDecodeSuccess(data.rawValue, {
+                        const area = {
                             height: Math.max(...cornerPointsY) - Math.min(...cornerPointsY),
                             width: Math.max(...cornerPointsX) - Math.min(...cornerPointsX),
                             x: Math.min(...cornerPointsX) + state.scanArea.x,
                             y: Math.min(...cornerPointsY) + state.scanArea.y,
-                        })
+                        }
+
+                        if (setAreaDetectedVariables) {
+                            const renderArea = translateAreaToVideoRender(video, area)
+                            video.parentElement?.style.setProperty(
+                                '--barcode-scanner-area-detected-height',
+                                `${renderArea.height}px`,
+                            )
+                            video.parentElement?.style.setProperty(
+                                '--barcode-scanner-area-detected-width',
+                                `${renderArea.width}px`,
+                            )
+                            video.parentElement?.style.setProperty(
+                                '--barcode-scanner-area-detected-x',
+                                `${renderArea.x}px`,
+                            )
+                            video.parentElement?.style.setProperty(
+                                '--barcode-scanner-area-detected-y',
+                                `${renderArea.y}px`,
+                            )
+                        }
+
+                        onDecodeSuccess(data.rawValue, area)
                     } else {
+                        if (setAreaDetectedVariables) {
+                            video.parentElement?.style.removeProperty(
+                                '--barcode-scanner-area-detected-height',
+                            )
+                            video.parentElement?.style.removeProperty(
+                                '--barcode-scanner-area-detected-width',
+                            )
+                            video.parentElement?.style.removeProperty(
+                                '--barcode-scanner-area-detected-x',
+                            )
+                            video.parentElement?.style.removeProperty(
+                                '--barcode-scanner-area-detected-y',
+                            )
+                        }
+
                         onDecodeFailure()
                     }
                 })
@@ -194,8 +213,8 @@ function createBarcodeScanner(
                     console.error('Failed to decode barcode')
                 })
                 .finally(() => {
+                    state.decodeFrameTs = performance.now()
                     state.isDecodeFrameProcessed = false
-                    state.decodeFrameRequestTimestamp = performance.now()
                     handleDecode(onDecodeSuccess, onDecodeFailure)
                 })
         })
@@ -208,22 +227,15 @@ function createBarcodeScanner(
 
         stop()
 
-        document.removeEventListener('visibilitychange', handleVisibilityChange)
-
         state.worker?.terminate()
         state.worker = null
         state.isDestroyed = true
-        state.isReady = false
     }
 
     function pause() {
-        if (debug) {
-            console.log('barcode-scanner:pause', state)
-        }
-
+        state.video.pause()
         state.canvas.height = state.video.videoHeight
         state.canvas.width = state.video.videoWidth
-        state.canvasContext.clearRect(0, 0, state.canvas.width, state.canvas.height)
         state.canvasContext.drawImage(
             state.video,
             0,
@@ -235,42 +247,45 @@ function createBarcodeScanner(
             state.canvas.width,
             state.canvas.height,
         )
+        state.canvas.toBlob(
+            (blob) => {
+                if (blob) {
+                    if (state.video.poster.startsWith('blob:')) {
+                        URL.revokeObjectURL(state.video.poster)
+                    }
 
-        state.video.poster = state.canvas.toDataURL()
+                    state.video.poster = URL.createObjectURL(blob)
+                }
+            },
+            'image/jpeg',
+            0.9,
+        )
 
         if (state.video.srcObject instanceof MediaStream) {
             state.video.srcObject.getTracks().forEach((track) => track.stop())
         }
 
-        state.video.srcObject = null
+        state.isVideoActive = false
         state.isVideoPaused = true
+        state.video.srcObject = null
     }
 
-    async function start(
-        { facingMode = 'environment' }: { facingMode?: 'environment' | 'user' } = {},
-        onDecodeSuccess: (data: string, area: ScanArea) => void,
-        onDecodeFailure: () => void = () => {},
-    ) {
-        if (debug) {
-            console.log('barcode-scanner:start:before', state)
-        }
-
+    async function start({
+        facingMode = 'environment',
+        ...rest
+    }: {
+        facingMode?: 'environment' | 'user'
+        onDecodeFailure?: () => void
+        onDecodeSuccess?: (data: string, area: ScanArea) => void
+    } = {}) {
         const hasAccess = await getCameraAccess()
 
         if (!hasAccess) {
             throw new Error('No camera access')
         }
 
-        if (
-            state.video.srcObject instanceof MediaStream &&
-            state.isVideoActive &&
-            state.isVideoPaused === false
-        ) {
-            return
-        }
-
         if (state.video.srcObject instanceof MediaStream) {
-            await state.video.play()
+            return
         } else {
             state.video.srcObject = await navigator.mediaDevices.getUserMedia({
                 video: {
@@ -281,19 +296,29 @@ function createBarcodeScanner(
             await state.video.play()
         }
 
-        state.facingMode = facingMode
         state.isVideoActive = true
         state.isVideoPaused = false
-        state.onDecodeFailure = onDecodeFailure
-        state.onDecodeSuccess = onDecodeSuccess
         state.scanArea = state.calcScanArea(state.video)
         state.video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'none'
 
-        if (debug) {
-            console.log('barcode-scanner:start:after', state)
+        if (setAreaPositionVariables) {
+            const renderArea = translateAreaToVideoRender(video, state.scanArea)
+            video.parentElement?.style.setProperty(
+                '--barcode-scanner-area-height',
+                `${renderArea.height}px`,
+            )
+            video.parentElement?.style.setProperty(
+                '--barcode-scanner-area-width',
+                `${renderArea.width}px`,
+            )
+            video.parentElement?.style.setProperty('--barcode-scanner-area-x', `${renderArea.x}px`)
+            video.parentElement?.style.setProperty('--barcode-scanner-area-y', `${renderArea.y}px`)
         }
 
-        handleDecode(onDecodeSuccess, onDecodeFailure)
+        handleDecode(
+            rest.onDecodeSuccess ?? onDecodeSuccess,
+            rest.onDecodeFailure ?? onDecodeFailure,
+        )
     }
 
     function stop() {
@@ -301,10 +326,14 @@ function createBarcodeScanner(
             state.video.srcObject.getTracks().forEach((track) => track.stop())
         }
 
-        state.video.poster = ''
-        state.video.srcObject = null
+        if (state.video.poster.startsWith('blob:')) {
+            URL.revokeObjectURL(state.video.poster)
+        }
+
         state.isVideoActive = false
         state.isVideoPaused = false
+        state.video.poster = ''
+        state.video.srcObject = null
     }
 
     return {

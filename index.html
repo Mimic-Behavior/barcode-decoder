@@ -17,11 +17,11 @@
         <div class="demo">
             <div
                 class="demo__video"
-                data-id="video"
+                data-id="video-container"
             >
                 <video
                     class="demo__video-renderer"
-                    data-id="video-renderer"
+                    data-id="video"
                 ></video>
                 <div
                     class="demo__video-overlay"
@@ -52,21 +52,29 @@
                 <div class="demo__control-row">
                     <select
                         class="demo__control-select"
-                        value="contain"
                         data-id="select-object-fit"
                     >
                         <option value="contain">Contain</option>
-                        <option value="cover">Cover</option>
+                        <option
+                            value="cover"
+                            selected
+                        >
+                            Cover
+                        </option>
                         <option value="fill">Fill</option>
                         <option value="none">None</option>
                         <option value="scale-down">Scale down</option>
                     </select>
                     <select
                         class="demo__control-select"
-                        value="center"
                         data-id="select-object-position"
                     >
-                        <option value="center">Center</option>
+                        <option
+                            value="center"
+                            selected
+                        >
+                            Center
+                        </option>
                         <option value="bottom left">Bottom left</option>
                         <option value="bottom right">Bottom right</option>
                         <option value="bottom">Bottom</option>

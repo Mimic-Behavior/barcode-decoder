@@ -32,7 +32,7 @@ async function decode(imageData: ImageData): Promise<DetectedBarcode | null> {
             worker.removeEventListener('message', handleMessage)
 
             rej(null)
-        }, 1000)
+        }, 1000 * 6)
 
         worker.addEventListener('message', handleMessage)
         worker.postMessage({ payload: { data: imageData, uuid }, type: 'decode' })

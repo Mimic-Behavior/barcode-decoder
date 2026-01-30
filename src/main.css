@@ -37,8 +37,8 @@ body {
 
 .demo__video-overlay {
     position: absolute;
-    inset: var(--barcode-scanner-result-area-y, var(--barcode-scanner-area-y)) auto auto
-        var(--barcode-scanner-result-area-x, var(--barcode-scanner-area-x));
+    top: var(--barcode-scanner-result-area-y, var(--barcode-scanner-area-y));
+    left: var(--barcode-scanner-result-area-x, var(--barcode-scanner-area-x));
     width: var(--barcode-scanner-result-area-width, var(--barcode-scanner-area-width));
     height: var(--barcode-scanner-result-area-height, var(--barcode-scanner-area-height));
     pointer-events: none;
@@ -46,7 +46,7 @@ body {
     border-radius: 16px;
     transition-timing-function: ease-in-out;
     transition-duration: 0.2s;
-    transition-property: inset, width, height;
+    transition-property: top, left, width, height;
 }
 
 .demo__video-preview {
