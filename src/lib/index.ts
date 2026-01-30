@@ -1,7 +1,5 @@
-import { BarcodeScanner } from './barcode-scanner'
+import { createBarcodeScanner } from './create-barcode-scanner'
 
-export type * from './barcode-detector.type'
-export type * from './barcode-scanner.types'
-export * as utils from './utils'
-export { BarcodeScanner }
-export default BarcodeScanner
+export * from './utils'
+export { createBarcodeScanner }
+export default createBarcodeScanner

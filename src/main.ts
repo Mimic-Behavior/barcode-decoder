@@ -1,4 +1,9 @@
-import { BarcodeScanner, utils } from './lib'
+import {
+    createBarcodeScanner,
+    type ScanArea,
+    translateAreaToVideoRender,
+    translateAreaToVideoSource,
+} from './lib'
 import './main.css'
 
 const video = document.querySelector<HTMLVideoElement>('[data-id="video"]')
@@ -10,6 +15,8 @@ const videoRenderer = document.querySelector<HTMLVideoElement>('[data-id="video-
 const buttonStart = document.querySelector('[data-id="button-start"]')
 const buttonPause = document.querySelector('[data-id="button-pause"]')
 const buttonStop = document.querySelector('[data-id="button-stop"]')
+const selectObjectFit = document.querySelector('[data-id="select-object-fit"]')
+const selectObjectPosition = document.querySelector('[data-id="select-object-position"]')
 
 /**
  * Get the result elements
@@ -18,11 +25,23 @@ const resultTitle = document.querySelector('[data-id="result-title"]')
 const resultValue = document.querySelector('[data-id="result-value"]')
 
 if (video && videoRenderer) {
-    const barcodeScanner = new BarcodeScanner({
-        onDecode: (data, area) => {
-            if (!resultTitle || !resultValue) {
-                return
-            }
+    const barcodeScanner = createBarcodeScanner(videoRenderer, {
+        calcScanArea(video) {
+            const size = (2 / 3) * Math.min(video.offsetWidth, video.offsetHeight)
+
+            return translateAreaToVideoSource(video, {
+                height: size,
+                width: size,
+                x: (video.offsetWidth - size) / 2,
+                y: (video.offsetHeight - size) / 2,
+            })
+        },
+    })
+
+    const unwatch = barcodeScanner.watch(
+        () => barcodeScanner.state.scanArea,
+        (scanArea) => {
+            const area = translateAreaToVideoRender(videoRenderer, scanArea)
 
             document.documentElement.style.setProperty('--barcode-scanner-area-x', `${area.x}px`)
             document.documentElement.style.setProperty('--barcode-scanner-area-y', `${area.y}px`)
@@ -35,36 +54,70 @@ if (video && videoRenderer) {
                 `${area.height}px`,
             )
 
-            if (data) {
-                resultValue.textContent = data
-            } else {
-                resultValue.textContent = 'No data'
-            }
+            unwatch()
         },
-        onDecodeError: () => {
-            if (!resultTitle || !resultValue) {
-                return
-            }
+    )
 
-            resultValue.textContent = 'Decode error'
-        },
-        options: {
-            calcScanArea(video) {
-                const size = (2 / 3) * Math.min(video.offsetWidth, video.offsetHeight)
+    function onDecodeSuccess(data: string, area: ScanArea) {
+        if (!resultTitle || !resultValue) {
+            return
+        }
 
-                return utils.convertToVideoArea(video, {
-                    height: size,
-                    width: size,
-                    x: (video.offsetWidth - size) / 2,
-                    y: (video.offsetHeight - size) / 2,
-                })
-            },
-            debug: true,
-            scanRate: 24,
-        },
-        video: videoRenderer,
+        document.documentElement.style.setProperty('--barcode-scanner-area-x', `${area.x}px`)
+        document.documentElement.style.setProperty('--barcode-scanner-area-y', `${area.y}px`)
+        document.documentElement.style.setProperty(
+            '--barcode-scanner-area-width',
+            `${area.width}px`,
+        )
+        document.documentElement.style.setProperty(
+            '--barcode-scanner-area-height',
+            `${area.height}px`,
+        )
+
+        if (data) {
+            resultValue.textContent = data
+        } else {
+            resultValue.textContent = 'No data'
+        }
+    }
+
+    function onDecodeFailure() {
+        if (!resultTitle || !resultValue) {
+            return
+        }
+
+        resultValue.textContent = 'Decode error'
+    }
+
+    buttonStart?.addEventListener('click', () => {
+        if (barcodeScanner.state.isReady) {
+            barcodeScanner.start(
+                {
+                    facingMode: 'environment',
+                },
+                onDecodeSuccess,
+                onDecodeFailure,
+            )
+        } else {
+            alert('Barcode scanner is not ready')
+        }
+    })
+    buttonPause?.addEventListener('click', () => {
+        barcodeScanner.pause()
+    })
+    buttonStop?.addEventListener('click', () => {
+        barcodeScanner.stop()
+    })
+    selectObjectFit?.addEventListener('change', (event) => {
+        videoRenderer.style.objectFit = (event.target as HTMLSelectElement).value
+    })
+    selectObjectPosition?.addEventListener('change', (event) => {
+        videoRenderer.style.objectPosition = (event.target as HTMLSelectElement).value
     })
 
+    /**
+     * Debug video scan area
+     */
     const canvas = document.createElement('canvas')
     const canvasContext = canvas.getContext('2d')
 
@@ -89,15 +142,5 @@ if (video && videoRenderer) {
             img.dataset.id = 'video-preview'
             video.appendChild(img)
         }
-    })
-
-    buttonStart?.addEventListener('click', () => {
-        barcodeScanner.start()
-    })
-    buttonPause?.addEventListener('click', () => {
-        barcodeScanner.pause()
-    })
-    buttonStop?.addEventListener('click', () => {
-        barcodeScanner.stop()
     })
 }
