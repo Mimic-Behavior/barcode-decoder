@@ -6,8 +6,10 @@ function createBarcodeScanner(
     video: HTMLVideoElement,
     {
         calcScanArea,
+        debug = false,
     }: {
         calcScanArea?: (video: HTMLVideoElement) => ScanArea
+        debug?: boolean
     } = {},
 ) {
     if (!(video instanceof HTMLVideoElement)) {
@@ -45,7 +47,7 @@ function createBarcodeScanner(
         calcScanArea: calcScanArea ?? getScanArea,
         canvas,
         canvasContext,
-        debug: true,
+        debug,
         decodeFrameRequestTimestamp: performance.now(),
         facingMode: 'environment',
         isDecodeFrameProcessed: false,
@@ -84,6 +86,10 @@ function createBarcodeScanner(
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     function handleVisibilityChange() {
+        if (debug) {
+            console.log('barcode-scanner:handleVisibilityChange', document.visibilityState, state)
+        }
+
         if (document.visibilityState === 'hidden') {
             if (state.isVideoActive && state.isVideoPaused === false) {
                 state.resumeOnVisibilityChange = true
@@ -109,6 +115,10 @@ function createBarcodeScanner(
         onDecodeSuccess: (data: string, area: ScanArea) => void,
         onDecodeFailure: () => void,
     ) {
+        if (debug) {
+            console.log('barcode-scanner:handleDecode', state, performance.now())
+        }
+
         if (state.isDestroyed || state.isVideoActive === false || state.isVideoPaused) {
             return
         }
@@ -207,6 +217,10 @@ function createBarcodeScanner(
     }
 
     function pause() {
+        if (debug) {
+            console.log('barcode-scanner:pause', state)
+        }
+
         state.canvas.height = state.video.videoHeight
         state.canvas.width = state.video.videoWidth
         state.canvasContext.clearRect(0, 0, state.canvas.width, state.canvas.height)
@@ -237,6 +251,10 @@ function createBarcodeScanner(
         onDecodeSuccess: (data: string, area: ScanArea) => void,
         onDecodeFailure: () => void = () => {},
     ) {
+        if (debug) {
+            console.log('barcode-scanner:start:before', state)
+        }
+
         const hasAccess = await getCameraAccess()
 
         if (!hasAccess) {
@@ -270,6 +288,10 @@ function createBarcodeScanner(
         state.onDecodeSuccess = onDecodeSuccess
         state.scanArea = state.calcScanArea(state.video)
         state.video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'none'
+
+        if (debug) {
+            console.log('barcode-scanner:start:after', state)
+        }
 
         handleDecode(onDecodeSuccess, onDecodeFailure)
     }

@@ -95,17 +95,13 @@ if (video && videoRenderer) {
     }
 
     buttonStart?.addEventListener('click', () => {
-        if (barcodeScanner.state.isReady) {
-            barcodeScanner.start(
-                {
-                    facingMode: 'environment',
-                },
-                onDecodeSuccess,
-                onDecodeFailure,
-            )
-        } else {
-            alert('Barcode scanner is not ready')
-        }
+        barcodeScanner.start(
+            {
+                facingMode: 'environment',
+            },
+            onDecodeSuccess,
+            onDecodeFailure,
+        )
     })
     buttonPause?.addEventListener('click', () => {
         barcodeScanner.pause()
