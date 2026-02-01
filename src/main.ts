@@ -26,17 +26,17 @@ const selectObjectPosition = document.querySelector('[data-id="select-object-pos
 const resultTitle = document.querySelector('[data-id="result-title"]')
 const resultValue = document.querySelector('[data-id="result-value"]')
 
-function delAreaVariable(element: HTMLElement, prefix: string) {
-    element.style.removeProperty(`${prefix}-height`)
-    element.style.removeProperty(`${prefix}-width`)
-    element.style.removeProperty(`${prefix}-x`)
-    element.style.removeProperty(`${prefix}-y`)
+function delAreaVariable(element: HTMLElement, name: string) {
+    element.style.removeProperty(`--${name}-height`)
+    element.style.removeProperty(`--${name}-width`)
+    element.style.removeProperty(`--${name}-x`)
+    element.style.removeProperty(`--${name}-y`)
 }
-function setAreaVariable(element: HTMLElement, prefix: string, area: ScanArea) {
-    element.style.setProperty(`${prefix}-height`, `${area.height}px`)
-    element.style.setProperty(`${prefix}-width`, `${area.width}px`)
-    element.style.setProperty(`${prefix}-x`, `${area.x}px`)
-    element.style.setProperty(`${prefix}-y`, `${area.y}px`)
+function setAreaVariable(element: HTMLElement, name: string, area: ScanArea) {
+    element.style.setProperty(`--${name}-height`, `${area.height}px`)
+    element.style.setProperty(`--${name}-width`, `${area.width}px`)
+    element.style.setProperty(`--${name}-x`, `${area.x}px`)
+    element.style.setProperty(`--${name}-y`, `${area.y}px`)
 }
 
 if (video && videoContainer) {
