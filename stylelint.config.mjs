@@ -2,6 +2,7 @@
 export default {
     extends: ['stylelint-config-standard', 'stylelint-config-recess-order'],
     rules: {
+        'no-descending-specificity': null,
         'selector-class-pattern': null,
     },
 }

@@ -1,6 +1,6 @@
 import type { DetectedBarcode } from 'barcode-detector/ponyfill'
 
-type DecodeReq = {
+type DecodeRequest = {
     payload: {
         data: ImageData
         uuid: string
@@ -8,7 +8,7 @@ type DecodeReq = {
     type: 'decode'
 }
 
-type DecodeRes = {
+type DecodeResponse = {
     payload: {
         data: DetectedBarcode | null
         uuid: string
@@ -16,4 +16,11 @@ type DecodeRes = {
     type: 'decode'
 }
 
-export type { DecodeReq, DecodeRes }
+type Init = {
+    payload: {
+        status: 'failure' | 'success'
+    }
+    type: 'init'
+}
+
+export type { DecodeRequest, DecodeResponse, Init }

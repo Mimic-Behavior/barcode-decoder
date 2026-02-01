@@ -11,15 +11,18 @@ export default defineConfig({
         },
         rollupOptions: {
             output: {
-                entryFileNames: '[name].js',
+                entryFileNames: '[name]-[hash].js',
             },
         },
+    },
+    server: {
+        host: true,
     },
     worker: {
         format: 'es',
         rollupOptions: {
             output: {
-                entryFileNames: '[name].js',
+                entryFileNames: '[name]-[hash].js',
             },
         },
     },

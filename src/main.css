@@ -37,10 +37,10 @@ body {
 
 .demo__video-overlay {
     position: absolute;
-    top: var(--barcode-scanner-result-area-y, var(--barcode-scanner-area-y));
-    left: var(--barcode-scanner-result-area-x, var(--barcode-scanner-area-x));
-    width: var(--barcode-scanner-result-area-width, var(--barcode-scanner-area-width));
-    height: var(--barcode-scanner-result-area-height, var(--barcode-scanner-area-height));
+    top: var(--barcode-scanner-area-detected-y, var(--barcode-scanner-area-y));
+    left: var(--barcode-scanner-area-detected-x, var(--barcode-scanner-area-x));
+    width: var(--barcode-scanner-area-detected-width, var(--barcode-scanner-area-width));
+    height: var(--barcode-scanner-area-detected-height, var(--barcode-scanner-area-height));
     pointer-events: none;
     border: 2px dashed #fff;
     border-radius: 16px;
@@ -89,6 +89,40 @@ body {
     background-color: #000;
     border: none;
     border-radius: 4px;
+}
+
+.demo__control-checkbox {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+.demo__control-checkbox-input {
+    display: none;
+}
+
+.demo__control-checkbox-input:checked + .demo__control-checkbox-icon {
+    color: #fff;
+}
+
+.demo__control-checkbox-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: transparent;
+    background-color: #000;
+    border: 1px solid #fff;
+    border-radius: 4px;
+}
+
+.demo__control-checkbox-text {
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 18px;
 }
 
 .demo__result-title {

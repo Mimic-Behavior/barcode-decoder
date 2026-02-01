@@ -1,9 +1,14 @@
 import { createWatchable } from './create-watchable'
-import { getCameraAccess, getScanArea, type ScanArea, translateAreaToVideoRender } from './utils'
-import { decode, install } from './worker'
+import { createWorker } from './create-worker'
+import { getCameraAccess, getScanArea as getScanAreaDefault, type ScanArea } from './utils'
+
+type DecodeFailureHandler = (this: State) => Promise<void> | void
+
+type DecodeSuccessHandler = (this: State, data: string, area: ScanArea) => Promise<void> | void
+
+type LifecycleHook = (this: State) => void
 
 type State = {
-    calcScanArea: (video: HTMLVideoElement) => ScanArea
     decodeFrameTs: number
     isDecodeFrameProcessed: boolean
     isDestroyed: boolean
@@ -12,37 +17,45 @@ type State = {
     scanArea: ScanArea
     scanRate: number
     video: HTMLVideoElement
-    worker: null | Worker
 }
 
 async function createBarcodeScanner(
     video: HTMLVideoElement,
     {
-        calcScanArea,
         debug,
-        onDecodeFailure = () => {},
-        onDecodeSuccess = () => {},
-        setAreaDetectedVariables,
-        setAreaPositionVariables,
+        getScanArea = getScanAreaDefault,
+        handleDecodeFailure = () => {},
+        handleDecodeSuccess = () => {},
+        lifecycle = {},
+        scanRate = 24,
     }: {
-        calcScanArea?: (video: HTMLVideoElement) => ScanArea
         debug?: boolean
-        onDecodeFailure?: () => void
-        onDecodeSuccess?: (data: string, area: ScanArea) => void
-        setAreaDetectedVariables?: boolean
-        setAreaPositionVariables?: boolean
+        getScanArea?: (video: HTMLVideoElement) => ScanArea
+        handleDecodeFailure?: DecodeFailureHandler
+        handleDecodeSuccess?: DecodeSuccessHandler
+        lifecycle?: {
+            onBeforeCreate?: LifecycleHook
+            onBeforeDecode?: LifecycleHook
+            onBeforeStart?: LifecycleHook
+            onBeforeStop?: LifecycleHook
+            onCreate?: LifecycleHook
+            onDecode?: LifecycleHook
+            onStart?: LifecycleHook
+            onStop?: LifecycleHook
+        }
+        scanRate?: number
     } = {},
 ) {
     if (!(video instanceof HTMLVideoElement)) {
         throw new Error('video is not a HTMLVideoElement')
     }
 
-    if (!(onDecodeSuccess instanceof Function)) {
-        throw new Error('onDecodeSuccess is not a function')
+    if (!(handleDecodeSuccess instanceof Function)) {
+        throw new Error('handleDecodeSuccess is not a function')
     }
 
-    if (!(onDecodeFailure instanceof Function)) {
-        throw new Error('onDecodeFailure is not a function')
+    if (!(handleDecodeFailure instanceof Function)) {
+        throw new Error('handleDecodeFailure is not a function')
     }
 
     const canvas = document.createElement('canvas')
@@ -52,22 +65,19 @@ async function createBarcodeScanner(
         throw new Error('canvas context is not supported')
     }
 
+    const { decode, worker } = createWorker()
     const { state } = createWatchable<State>({
-        calcScanArea: calcScanArea ?? getScanArea,
         decodeFrameTs: performance.now(),
         isDecodeFrameProcessed: false,
         isDestroyed: false,
         isVideoActive: false,
         isVideoPaused: false,
         scanArea: getScanArea(video),
-        scanRate: 24,
+        scanRate,
         video,
-        worker: null,
     })
 
     const requestFrame = video.requestVideoFrameCallback?.bind(video) ?? requestAnimationFrame
-
-    state.worker = await install()
 
     state.video.autoplay = true
     state.video.disablePictureInPicture = true
@@ -75,15 +85,18 @@ async function createBarcodeScanner(
     state.video.muted = true
     state.video.playsInline = true
 
-    function handleDecode(
-        onDecodeSuccess: (data: string, area: ScanArea) => void,
-        onDecodeFailure: () => void,
-    ) {
-        if (state.isDestroyed || state.isVideoActive === false) {
-            return
-        }
+    if (lifecycle.onCreate) {
+        lifecycle.onCreate.call(state)
+    }
 
-        requestFrame(() => {
+    function handleDecode(handleDecodeSuccess: DecodeSuccessHandler, handleDecodeFailure: DecodeFailureHandler) {
+        requestFrame(tick)
+
+        async function tick() {
+            if (state.isDestroyed || state.isVideoActive === false) {
+                return
+            }
+
             if (
                 // Skip if the time since the last request frame is less than the scan rate
                 performance.now() - state.decodeFrameTs < 1000 / state.scanRate ||
@@ -92,32 +105,16 @@ async function createBarcodeScanner(
                 // Skip if the video is not ready
                 state.video.readyState <= 1
             ) {
-                handleDecode(onDecodeSuccess, onDecodeFailure)
+                requestFrame(tick)
                 return
             }
 
             state.isDecodeFrameProcessed = true
 
-            state.scanArea = state.calcScanArea(state.video)
+            state.scanArea = getScanArea(state.video)
 
-            if (setAreaPositionVariables) {
-                const renderArea = translateAreaToVideoRender(video, state.scanArea)
-                video.parentElement?.style.setProperty(
-                    '--barcode-scanner-area-height',
-                    `${renderArea.height}px`,
-                )
-                video.parentElement?.style.setProperty(
-                    '--barcode-scanner-area-width',
-                    `${renderArea.width}px`,
-                )
-                video.parentElement?.style.setProperty(
-                    '--barcode-scanner-area-x',
-                    `${renderArea.x}px`,
-                )
-                video.parentElement?.style.setProperty(
-                    '--barcode-scanner-area-y',
-                    `${renderArea.y}px`,
-                )
+            if (lifecycle.onBeforeDecode) {
+                lifecycle.onBeforeDecode.call(state)
             }
 
             canvas.height = state.scanArea.height
@@ -147,115 +144,89 @@ async function createBarcodeScanner(
                 )
             }
 
-            decode(imageData)
-                .then((data) => {
-                    if (data) {
-                        const cornerPointsX = data.cornerPoints.map((p) => p.x)
-                        const cornerPointsY = data.cornerPoints.map((p) => p.y)
-                        const area = {
-                            height: Math.max(...cornerPointsY) - Math.min(...cornerPointsY),
-                            width: Math.max(...cornerPointsX) - Math.min(...cornerPointsX),
-                            x: Math.min(...cornerPointsX) + state.scanArea.x,
-                            y: Math.min(...cornerPointsY) + state.scanArea.y,
-                        }
+            try {
+                const data = await decode(imageData)
 
-                        if (setAreaDetectedVariables) {
-                            const renderArea = translateAreaToVideoRender(video, area)
-                            video.parentElement?.style.setProperty(
-                                '--barcode-scanner-area-detected-height',
-                                `${renderArea.height}px`,
-                            )
-                            video.parentElement?.style.setProperty(
-                                '--barcode-scanner-area-detected-width',
-                                `${renderArea.width}px`,
-                            )
-                            video.parentElement?.style.setProperty(
-                                '--barcode-scanner-area-detected-x',
-                                `${renderArea.x}px`,
-                            )
-                            video.parentElement?.style.setProperty(
-                                '--barcode-scanner-area-detected-y',
-                                `${renderArea.y}px`,
-                            )
-                        }
-
-                        onDecodeSuccess(data.rawValue, area)
-                    } else {
-                        if (setAreaDetectedVariables) {
-                            video.parentElement?.style.removeProperty(
-                                '--barcode-scanner-area-detected-height',
-                            )
-                            video.parentElement?.style.removeProperty(
-                                '--barcode-scanner-area-detected-width',
-                            )
-                            video.parentElement?.style.removeProperty(
-                                '--barcode-scanner-area-detected-x',
-                            )
-                            video.parentElement?.style.removeProperty(
-                                '--barcode-scanner-area-detected-y',
-                            )
-                        }
-
-                        onDecodeFailure()
+                if (data) {
+                    const cornerPointsX = data.cornerPoints.map((p) => p.x)
+                    const cornerPointsY = data.cornerPoints.map((p) => p.y)
+                    const area = {
+                        height: Math.max(...cornerPointsY) - Math.min(...cornerPointsY),
+                        width: Math.max(...cornerPointsX) - Math.min(...cornerPointsX),
+                        x: Math.min(...cornerPointsX) + state.scanArea.x,
+                        y: Math.min(...cornerPointsY) + state.scanArea.y,
                     }
-                })
-                .catch(() => {
-                    console.error('Failed to decode barcode')
-                })
-                .finally(() => {
-                    state.decodeFrameTs = performance.now()
-                    state.isDecodeFrameProcessed = false
-                    handleDecode(onDecodeSuccess, onDecodeFailure)
-                })
-        })
+
+                    await Promise.resolve(handleDecodeSuccess.call(state, data.rawValue, area))
+                } else {
+                    await Promise.resolve(handleDecodeFailure.call(state))
+                }
+            } catch (err) {
+                console.warn('Failed to decode barcode')
+
+                if (err) {
+                    console.error(err)
+                }
+            } finally {
+                if (lifecycle.onDecode) {
+                    lifecycle.onDecode.call(state)
+                }
+
+                state.decodeFrameTs = performance.now()
+                state.isDecodeFrameProcessed = false
+
+                requestFrame(tick)
+            }
+        }
     }
 
-    async function destroy() {
+    function destroy() {
         if (state.isDestroyed) {
             return
         }
 
         stop()
 
-        state.worker?.terminate()
-        state.worker = null
+        worker.terminate()
+
         state.isDestroyed = true
     }
 
-    function pause() {
+    async function pause(): Promise<void> {
+        if (state.isVideoActive === false || state.isVideoPaused || state.isDestroyed) {
+            return
+        }
+
         state.video.pause()
+
         canvas.height = state.video.videoHeight
         canvas.width = state.video.videoWidth
-        canvasContext.drawImage(
-            state.video,
-            0,
-            0,
-            canvas.width,
-            canvas.height,
-            0,
-            0,
-            canvas.width,
-            canvas.height,
-        )
-        canvas.toBlob(
-            (blob) => {
-                if (blob) {
-                    if (state.video.poster.startsWith('blob:')) {
-                        URL.revokeObjectURL(state.video.poster)
-                    }
+        canvasContext.drawImage(state.video, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height)
 
-                    state.video.poster = URL.createObjectURL(blob)
-                }
-            },
-            'image/jpeg',
-            0.9,
-        )
+        const blob: Blob = await new Promise((res, rej) => {
+            canvas.toBlob(
+                (blob) => {
+                    if (blob) {
+                        res(blob)
+                    } else {
+                        rej(new Error('Failed to convert canvas to blob'))
+                    }
+                },
+                'image/jpeg',
+                0.9,
+            )
+        })
+
+        if (state.video.poster.startsWith('blob:')) {
+            URL.revokeObjectURL(state.video.poster)
+        }
+
+        state.video.poster = URL.createObjectURL(blob)
 
         if (state.video.srcObject instanceof MediaStream) {
             state.video.srcObject.getTracks().forEach((track) => track.stop())
         }
 
-        state.isVideoActive = false
         state.isVideoPaused = true
         state.video.srcObject = null
     }
@@ -265,9 +236,13 @@ async function createBarcodeScanner(
         ...rest
     }: {
         facingMode?: 'environment' | 'user'
-        onDecodeFailure?: () => void
-        onDecodeSuccess?: (data: string, area: ScanArea) => void
+        handleDecodeFailure?: DecodeFailureHandler
+        handleDecodeSuccess?: DecodeSuccessHandler
     } = {}) {
+        if (lifecycle.onBeforeStart) {
+            lifecycle.onBeforeStart.call(state)
+        }
+
         const hasAccess = await getCameraAccess()
 
         if (!hasAccess) {
@@ -288,30 +263,25 @@ async function createBarcodeScanner(
 
         state.isVideoActive = true
         state.isVideoPaused = false
-        state.scanArea = state.calcScanArea(state.video)
+        state.scanArea = getScanArea(state.video)
         state.video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'none'
 
-        if (setAreaPositionVariables) {
-            const renderArea = translateAreaToVideoRender(video, state.scanArea)
-            video.parentElement?.style.setProperty(
-                '--barcode-scanner-area-height',
-                `${renderArea.height}px`,
-            )
-            video.parentElement?.style.setProperty(
-                '--barcode-scanner-area-width',
-                `${renderArea.width}px`,
-            )
-            video.parentElement?.style.setProperty('--barcode-scanner-area-x', `${renderArea.x}px`)
-            video.parentElement?.style.setProperty('--barcode-scanner-area-y', `${renderArea.y}px`)
+        if (lifecycle.onStart) {
+            lifecycle.onStart.call(state)
         }
 
-        handleDecode(
-            rest.onDecodeSuccess ?? onDecodeSuccess,
-            rest.onDecodeFailure ?? onDecodeFailure,
-        )
+        handleDecode(rest.handleDecodeSuccess ?? handleDecodeSuccess, rest.handleDecodeFailure ?? handleDecodeFailure)
     }
 
-    function stop() {
+    async function stop() {
+        if (state.isVideoActive === false || state.isDestroyed) {
+            return
+        }
+
+        if (lifecycle.onBeforeStop) {
+            lifecycle.onBeforeStop.call(state)
+        }
+
         if (state.video.srcObject instanceof MediaStream) {
             state.video.srcObject.getTracks().forEach((track) => track.stop())
         }
@@ -324,6 +294,10 @@ async function createBarcodeScanner(
         state.isVideoPaused = false
         state.video.poster = ''
         state.video.srcObject = null
+
+        if (lifecycle.onStop) {
+            lifecycle.onStop.call(state)
+        }
     }
 
     return {
@@ -335,4 +309,5 @@ async function createBarcodeScanner(
     }
 }
 
+export type { DecodeFailureHandler, DecodeSuccessHandler, LifecycleHook, State }
 export { createBarcodeScanner }
