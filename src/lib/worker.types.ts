@@ -1,4 +1,12 @@
-import type { DetectedBarcode } from 'barcode-detector/ponyfill'
+import type { BarcodeFormat, DetectedBarcode } from 'barcode-detector/ponyfill'
+
+type Config = {
+    payload: {
+        formats: BarcodeFormat[]
+        wasmUrl: string
+    }
+    type: 'config'
+}
 
 type DecodeRequest = {
     payload: {
@@ -23,4 +31,4 @@ type Init = {
     type: 'init'
 }
 
-export type { DecodeRequest, DecodeResponse, Init }
+export type { Config, DecodeRequest, DecodeResponse, Init }

@@ -1,36 +1,51 @@
-import type { DetectedBarcode } from 'barcode-detector/ponyfill'
+import type { BarcodeFormat, DetectedBarcode } from 'barcode-detector/ponyfill'
+
+import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url&no-inline'
 
 import type { DecodeResponse, Init } from './worker.types'
 
-const WORKER_LOAD_TIMEOUT = 1000 * 32
-const WORKER_DECODE_TIMEOUT = 1000 * 16
+import {
+    WORKER_DECODE_FAILURE_CAUSE,
+    WORKER_DECODE_TIMEOUT,
+    WORKER_DECODE_TIMEOUT_CAUSE,
+    WORKER_LOAD_FAILURE_CAUSE,
+    WORKER_LOAD_TIMEOUT,
+    WORKER_LOAD_TIMEOUT_CAUSE,
+} from './constants'
 
-function createWorker() {
+function createWorker({ formats }: { formats: BarcodeFormat[] }) {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
     const workerReady = new Promise<boolean>((res, rej) => {
         const timeoutId = setTimeout(() => {
-            rej(new Error('Worker load timeout'))
+            worker.removeEventListener('message', handleMessage)
+
+            rej(new Error(WORKER_LOAD_TIMEOUT_CAUSE))
         }, WORKER_LOAD_TIMEOUT)
 
-        worker.addEventListener(
-            'message',
-            ({ data: { payload, type } }: MessageEvent<Init>) => {
-                if (type !== 'init') {
-                    return
-                }
+        const handleMessage = ({ data: { payload, type } }: MessageEvent<Init>) => {
+            if (type !== 'init') {
+                return
+            }
 
-                clearTimeout(timeoutId)
+            clearTimeout(timeoutId)
 
-                if (payload.status === 'success') {
-                    res(true)
-                } else {
-                    rej(new Error('Worker failed to load'))
-                }
+            worker.removeEventListener('message', handleMessage)
+
+            if (payload.status === 'success') {
+                res(true)
+            } else {
+                rej(new Error(WORKER_LOAD_FAILURE_CAUSE))
+            }
+        }
+
+        worker.addEventListener('message', handleMessage)
+        worker.postMessage({
+            payload: {
+                formats,
+                wasmUrl,
             },
-            {
-                once: true,
-            },
-        )
+            type: 'config',
+        })
     })
 
     async function decode(imageData: ImageData): Promise<DetectedBarcode | null> {
@@ -39,10 +54,10 @@ function createWorker() {
         const uuid = `${performance.now()}-${Math.random().toString(36).slice(2)}`
 
         return new Promise((res, rej) => {
-            const timeoutId: ReturnType<typeof setTimeout> = setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 worker.removeEventListener('message', handleMessage)
 
-                rej(new Error('Decode timeout'))
+                rej(new Error(WORKER_DECODE_TIMEOUT_CAUSE))
             }, WORKER_DECODE_TIMEOUT)
 
             const handleMessage = ({ data: { payload, type } }: MessageEvent<DecodeResponse>) => {
@@ -54,11 +69,21 @@ function createWorker() {
 
                 worker.removeEventListener('message', handleMessage)
 
-                res(payload.data)
+                if (payload.data) {
+                    res(payload.data)
+                } else {
+                    rej(new Error(WORKER_DECODE_FAILURE_CAUSE))
+                }
             }
 
             worker.addEventListener('message', handleMessage)
-            worker.postMessage({ payload: { data: imageData, uuid }, type: 'decode' })
+            worker.postMessage({
+                payload: {
+                    data: imageData,
+                    uuid,
+                },
+                type: 'decode',
+            })
         })
     }
 

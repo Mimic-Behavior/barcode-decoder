@@ -1,12 +1,41 @@
-import { createWatchable } from './create-watchable'
+import type { BarcodeFormat } from 'barcode-detector/ponyfill'
+
+import { WORKER_LOAD_FAILURE_CAUSE, WORKER_LOAD_TIMEOUT_CAUSE } from './constants'
 import { createWorker } from './create-worker'
 import { getCameraAccess, getScanArea as getScanAreaDefault, type ScanArea } from './utils'
 
-type DecodeFailureHandler = (this: State) => Promise<void> | void
+type Context = {
+    state: State
+}
 
-type DecodeSuccessHandler = (this: State, data: string, area: ScanArea) => Promise<void> | void
+type DecodeFailureHandler = () => Promise<void> | void
 
-type LifecycleHook = (this: State) => void
+type DecodeSuccessHandler = (data: string, area: ScanArea) => Promise<void> | void
+
+type Lifecycle = {
+    onBeforeCreate?: LifecycleHook
+    onBeforeDecode?: LifecycleHook
+    onBeforePause?: LifecycleHook
+    onBeforeStart?: LifecycleHook
+    onBeforeStop?: LifecycleHook
+    onCreate?: LifecycleHook
+    onDecode?: LifecycleHook
+    onPause?: LifecycleHook
+    onStart?: LifecycleHook
+    onStop?: LifecycleHook
+}
+
+type LifecycleHook = (ctx: Context) => void
+
+type Options = {
+    debug?: boolean
+    formats?: BarcodeFormat[]
+    getScanArea?: (video: HTMLVideoElement) => ScanArea
+    handleDecodeFailure?: DecodeFailureHandler
+    handleDecodeSuccess?: DecodeSuccessHandler
+    lifecycle?: Lifecycle
+    scanRate?: number
+}
 
 type State = {
     decodeFrameTs: number
@@ -14,6 +43,7 @@ type State = {
     isDestroyed: boolean
     isVideoActive: boolean
     isVideoPaused: boolean
+    isWorkerLoadFailure: boolean
     scanArea: ScanArea
     scanRate: number
     video: HTMLVideoElement
@@ -23,28 +53,13 @@ async function createBarcodeScanner(
     video: HTMLVideoElement,
     {
         debug,
+        formats = ['qr_code'],
         getScanArea = getScanAreaDefault,
-        handleDecodeFailure = () => {},
-        handleDecodeSuccess = () => {},
+        handleDecodeFailure,
+        handleDecodeSuccess,
         lifecycle = {},
         scanRate = 24,
-    }: {
-        debug?: boolean
-        getScanArea?: (video: HTMLVideoElement) => ScanArea
-        handleDecodeFailure?: DecodeFailureHandler
-        handleDecodeSuccess?: DecodeSuccessHandler
-        lifecycle?: {
-            onBeforeCreate?: LifecycleHook
-            onBeforeDecode?: LifecycleHook
-            onBeforeStart?: LifecycleHook
-            onBeforeStop?: LifecycleHook
-            onCreate?: LifecycleHook
-            onDecode?: LifecycleHook
-            onStart?: LifecycleHook
-            onStop?: LifecycleHook
-        }
-        scanRate?: number
-    } = {},
+    }: Options = {},
 ) {
     if (!(video instanceof HTMLVideoElement)) {
         throw new Error('video is not a HTMLVideoElement')
@@ -65,18 +80,20 @@ async function createBarcodeScanner(
         throw new Error('canvas context is not supported')
     }
 
-    const { decode, worker } = createWorker()
-    const { state } = createWatchable<State>({
+    const { decode, worker } = createWorker({ formats })
+
+    const state: State = {
         decodeFrameTs: performance.now(),
         isDecodeFrameProcessed: false,
         isDestroyed: false,
         isVideoActive: false,
         isVideoPaused: false,
+        isWorkerLoadFailure: false,
         scanArea: getScanArea(video),
         scanRate,
         video,
-    })
-
+    }
+    const ctx: Context = { state }
     const requestFrame = video.requestVideoFrameCallback?.bind(video) ?? requestAnimationFrame
 
     state.video.autoplay = true
@@ -86,10 +103,13 @@ async function createBarcodeScanner(
     state.video.playsInline = true
 
     if (lifecycle.onCreate) {
-        lifecycle.onCreate.call(state)
+        lifecycle.onCreate(ctx)
     }
 
-    function handleDecode(handleDecodeSuccess: DecodeSuccessHandler, handleDecodeFailure: DecodeFailureHandler) {
+    function handleDecode(
+        handleDecodeSuccess: DecodeSuccessHandler,
+        handleDecodeFailure: DecodeFailureHandler = () => {},
+    ) {
         requestFrame(tick)
 
         async function tick() {
@@ -114,7 +134,7 @@ async function createBarcodeScanner(
             state.scanArea = getScanArea(state.video)
 
             if (lifecycle.onBeforeDecode) {
-                lifecycle.onBeforeDecode.call(state)
+                lifecycle.onBeforeDecode(ctx)
             }
 
             canvas.height = state.scanArea.height
@@ -157,25 +177,34 @@ async function createBarcodeScanner(
                         y: Math.min(...cornerPointsY) + state.scanArea.y,
                     }
 
-                    await Promise.resolve(handleDecodeSuccess.call(state, data.rawValue, area))
+                    await Promise.resolve(handleDecodeSuccess(data.rawValue, area))
                 } else {
-                    await Promise.resolve(handleDecodeFailure.call(state))
+                    await Promise.resolve(handleDecodeFailure())
                 }
             } catch (err) {
                 console.warn('Failed to decode barcode')
 
                 if (err) {
                     console.error(err)
+
+                    if (
+                        err instanceof Error &&
+                        (err.cause === WORKER_LOAD_FAILURE_CAUSE || err.cause === WORKER_LOAD_TIMEOUT_CAUSE)
+                    ) {
+                        state.isWorkerLoadFailure = true
+                    }
                 }
             } finally {
                 if (lifecycle.onDecode) {
-                    lifecycle.onDecode.call(state)
+                    lifecycle.onDecode(ctx)
                 }
 
-                state.decodeFrameTs = performance.now()
-                state.isDecodeFrameProcessed = false
+                if (state.isWorkerLoadFailure === false) {
+                    state.isDecodeFrameProcessed = false
+                    state.decodeFrameTs = performance.now()
 
-                requestFrame(tick)
+                    requestFrame(tick)
+                }
             }
         }
     }
@@ -197,20 +226,20 @@ async function createBarcodeScanner(
             return
         }
 
-        state.video.pause()
-
-        canvas.height = state.video.videoHeight
-        canvas.width = state.video.videoWidth
-        canvasContext.drawImage(state.video, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height)
-
-        state.video.poster = canvas.toDataURL('image/jpeg', 0.9)
+        if (lifecycle.onBeforePause) {
+            lifecycle.onBeforePause(ctx)
+        }
 
         if (state.video.srcObject instanceof MediaStream) {
             state.video.srcObject.getTracks().forEach((track) => track.stop())
+            state.video.srcObject = null
         }
 
         state.isVideoPaused = true
-        state.video.srcObject = null
+
+        if (lifecycle.onPause) {
+            lifecycle.onPause(ctx)
+        }
     }
 
     async function start({
@@ -221,8 +250,15 @@ async function createBarcodeScanner(
         handleDecodeFailure?: DecodeFailureHandler
         handleDecodeSuccess?: DecodeSuccessHandler
     } = {}) {
+        const onDecodeSuccess = rest.handleDecodeSuccess ?? handleDecodeSuccess
+        const onDecodeFailure = rest.handleDecodeFailure ?? handleDecodeFailure
+
+        if (!onDecodeSuccess) {
+            throw new Error('handleDecodeSuccess is required')
+        }
+
         if (lifecycle.onBeforeStart) {
-            lifecycle.onBeforeStart.call(state)
+            lifecycle.onBeforeStart(ctx)
         }
 
         const hasAccess = await getCameraAccess()
@@ -249,10 +285,10 @@ async function createBarcodeScanner(
         state.video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'none'
 
         if (lifecycle.onStart) {
-            lifecycle.onStart.call(state)
+            lifecycle.onStart(ctx)
         }
 
-        handleDecode(rest.handleDecodeSuccess ?? handleDecodeSuccess, rest.handleDecodeFailure ?? handleDecodeFailure)
+        handleDecode(onDecodeSuccess, onDecodeFailure)
     }
 
     async function stop() {
@@ -261,20 +297,20 @@ async function createBarcodeScanner(
         }
 
         if (lifecycle.onBeforeStop) {
-            lifecycle.onBeforeStop.call(state)
+            lifecycle.onBeforeStop(ctx)
         }
 
         if (state.video.srcObject instanceof MediaStream) {
             state.video.srcObject.getTracks().forEach((track) => track.stop())
+            state.video.srcObject = null
         }
 
         state.isVideoActive = false
         state.isVideoPaused = false
         state.video.poster = ''
-        state.video.srcObject = null
 
         if (lifecycle.onStop) {
-            lifecycle.onStop.call(state)
+            lifecycle.onStop(ctx)
         }
     }
 

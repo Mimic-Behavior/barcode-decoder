@@ -32,6 +32,7 @@ function delAreaVariable(element: HTMLElement, name: string) {
     element.style.removeProperty(`--${name}-x`)
     element.style.removeProperty(`--${name}-y`)
 }
+
 function setAreaVariable(element: HTMLElement, name: string, area: ScanArea) {
     element.style.setProperty(`--${name}-height`, `${area.height}px`)
     element.style.setProperty(`--${name}-width`, `${area.width}px`)
@@ -58,7 +59,7 @@ if (video && videoContainer) {
                 return
             }
 
-            delAreaVariable(this.video.parentElement!, 'barcode-scanner-area-detected')
+            delAreaVariable(video, 'barcode-scanner-area-detected')
 
             resultValue.textContent = 'No data'
         },
@@ -68,9 +69,9 @@ if (video && videoContainer) {
             }
 
             setAreaVariable(
-                this.video.parentElement!,
+                video.parentElement!,
                 'barcode-scanner-area-detected',
-                translateAreaToVideoRender(this.video, area),
+                translateAreaToVideoRender(video, area),
             )
 
             if (checkboxAlertOnSuccess?.checked) {
@@ -85,18 +86,18 @@ if (video && videoContainer) {
             resultValue.textContent = data
         },
         lifecycle: {
-            onBeforeDecode() {
+            onBeforeDecode({ state }) {
                 setAreaVariable(
-                    this.video.parentElement!,
+                    video.parentElement!,
                     'barcode-scanner-area',
-                    translateAreaToVideoRender(this.video, this.scanArea),
+                    translateAreaToVideoRender(video, state.scanArea),
                 )
             },
-            onStart() {
+            onStart({ state }) {
                 setAreaVariable(
-                    this.video.parentElement!,
+                    video.parentElement!,
                     'barcode-scanner-area',
-                    translateAreaToVideoRender(this.video, this.scanArea),
+                    translateAreaToVideoRender(video, state.scanArea),
                 )
             },
         },

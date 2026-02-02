@@ -1,11 +1,6 @@
-import {
-    type BarcodeDetectorOptions,
-    BarcodeDetector as BarcodeDetectorPonyfill,
-    prepareZXingModule,
-} from 'barcode-detector/ponyfill'
-import zxingUrl from 'zxing-wasm/reader/zxing_reader.wasm?url&no-inline'
+import { BarcodeDetector as BarcodeDetectorPonyfill, prepareZXingModule } from 'barcode-detector/ponyfill'
 
-import type { DecodeRequest, DecodeResponse, Init } from './worker.types'
+import type { Config, DecodeRequest, DecodeResponse, Init } from './worker.types'
 
 import { isBarcodeDetectorAvailable } from './utils/is-barcode-detector-available'
 
@@ -13,61 +8,46 @@ const worker = self as unknown as Worker
 
 let barcodeDetector: BarcodeDetectorPonyfill | null = null
 
-const barcodeDetectorOptions: BarcodeDetectorOptions = { formats: ['qr_code'] }
-
-try {
-    if (isBarcodeDetectorAvailable(worker)) {
-        barcodeDetector = new worker.BarcodeDetector(barcodeDetectorOptions)
-
-        worker.postMessage({
-            payload: {
-                status: 'success',
-            },
-            type: 'init',
-        } satisfies Init)
-    } else {
-        prepareZXingModule({
-            overrides: {
-                instantiateWasm(imports, successCallback) {
-                    fetch(zxingUrl)
-                        .then((response) => response.arrayBuffer())
-                        .then((arrayBuffer) =>
-                            WebAssembly.instantiate(arrayBuffer, imports).then(({ instance }) =>
-                                successCallback(instance),
-                            ),
-                        )
-
-                    return {}
-                },
-                postRun: [
-                    () => {
-                        worker.postMessage({
-                            payload: {
-                                status: 'success',
-                            },
-                            type: 'init',
-                        } satisfies Init)
-                    },
-                ],
-            },
-        })
-
-        barcodeDetector = new BarcodeDetectorPonyfill(barcodeDetectorOptions)
+worker.addEventListener('message', async ({ data: { payload, type } }: MessageEvent<Config>) => {
+    if (type !== 'config') {
+        return
     }
-} catch (error) {
-    console.error(error)
 
-    worker.postMessage({
-        payload: {
-            status: 'failure',
-        },
-        type: 'init',
-    } satisfies Init)
-}
+    const barcodeDetectorOptions = { formats: payload.formats }
 
-worker.addEventListener('message', handleDecode)
+    try {
+        if (isBarcodeDetectorAvailable(worker)) {
+            barcodeDetector = new worker.BarcodeDetector(barcodeDetectorOptions)
 
-async function handleDecode({ data: { payload, type } }: MessageEvent<DecodeRequest>) {
+            sendInitResponse('success')
+        } else {
+            prepareZXingModule({
+                overrides: {
+                    instantiateWasm(imports, successCallback) {
+                        fetch(payload.wasmUrl)
+                            .then((response) => response.arrayBuffer())
+                            .then((arrayBuffer) =>
+                                WebAssembly.instantiate(arrayBuffer, imports).then(({ instance }) =>
+                                    successCallback(instance),
+                                ),
+                            )
+
+                        return {}
+                    },
+                    postRun: [() => sendInitResponse('success')],
+                },
+            })
+
+            barcodeDetector = new BarcodeDetectorPonyfill(barcodeDetectorOptions)
+        }
+    } catch (error) {
+        console.error(error)
+
+        sendInitResponse('failure')
+    }
+})
+
+worker.addEventListener('message', async ({ data: { payload, type } }: MessageEvent<DecodeRequest>) => {
     if (type !== 'decode') {
         return
     }
@@ -93,4 +73,13 @@ async function handleDecode({ data: { payload, type } }: MessageEvent<DecodeRequ
     }
 
     worker.postMessage(response)
+})
+
+function sendInitResponse(status: 'failure' | 'success') {
+    worker.postMessage({
+        payload: {
+            status,
+        },
+        type: 'init',
+    } satisfies Init)
 }

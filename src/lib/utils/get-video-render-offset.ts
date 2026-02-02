@@ -12,9 +12,7 @@ function getVideoRenderOffset(video: HTMLVideoElement, renderSize: RenderSize): 
         .split(' ')
         .map((part, index) =>
             part.endsWith('%')
-                ? ((index === 0
-                      ? video.offsetWidth - renderSize.width
-                      : video.offsetHeight - renderSize.height) *
+                ? ((index === 0 ? video.offsetWidth - renderSize.width : video.offsetHeight - renderSize.height) *
                       parseFloat(part)) /
                   100
                 : parseFloat(part),

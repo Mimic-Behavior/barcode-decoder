@@ -14,25 +14,17 @@ function getVideoRenderSize(video: HTMLVideoElement): RenderSize {
         case 'contain': {
             return {
                 height:
-                    sourceAspectRatio < renderAspectRatio
-                        ? video.offsetHeight
-                        : video.offsetWidth / sourceAspectRatio,
+                    sourceAspectRatio < renderAspectRatio ? video.offsetHeight : video.offsetWidth / sourceAspectRatio,
                 width:
-                    sourceAspectRatio < renderAspectRatio
-                        ? video.offsetHeight * sourceAspectRatio
-                        : video.offsetWidth,
+                    sourceAspectRatio < renderAspectRatio ? video.offsetHeight * sourceAspectRatio : video.offsetWidth,
             }
         }
         case 'cover': {
             return {
                 height:
-                    sourceAspectRatio > renderAspectRatio
-                        ? video.offsetHeight
-                        : video.offsetWidth / sourceAspectRatio,
+                    sourceAspectRatio > renderAspectRatio ? video.offsetHeight : video.offsetWidth / sourceAspectRatio,
                 width:
-                    sourceAspectRatio > renderAspectRatio
-                        ? video.offsetHeight * sourceAspectRatio
-                        : video.offsetWidth,
+                    sourceAspectRatio > renderAspectRatio ? video.offsetHeight * sourceAspectRatio : video.offsetWidth,
             }
         }
         case 'fill': {
@@ -44,15 +36,11 @@ function getVideoRenderSize(video: HTMLVideoElement): RenderSize {
         case 'scale-down': {
             return {
                 height: Math.min(
-                    sourceAspectRatio < renderAspectRatio
-                        ? video.offsetHeight
-                        : video.offsetWidth / sourceAspectRatio,
+                    sourceAspectRatio < renderAspectRatio ? video.offsetHeight : video.offsetWidth / sourceAspectRatio,
                     video.videoHeight,
                 ),
                 width: Math.min(
-                    sourceAspectRatio < renderAspectRatio
-                        ? video.offsetHeight * sourceAspectRatio
-                        : video.offsetWidth,
+                    sourceAspectRatio < renderAspectRatio ? video.offsetHeight * sourceAspectRatio : video.offsetWidth,
                     video.videoWidth,
                 ),
             }
