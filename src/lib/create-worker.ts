@@ -5,7 +5,6 @@ import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url&no-inline'
 import type { DecodeResponse, Init } from './worker.types'
 
 import {
-    WORKER_DECODE_FAILURE_CAUSE,
     WORKER_DECODE_TIMEOUT,
     WORKER_DECODE_TIMEOUT_CAUSE,
     WORKER_LOAD_FAILURE_CAUSE,
@@ -69,11 +68,7 @@ function createWorker({ formats }: { formats: BarcodeFormat[] }) {
 
                 worker.removeEventListener('message', handleMessage)
 
-                if (payload.data) {
-                    res(payload.data)
-                } else {
-                    rej(new Error(WORKER_DECODE_FAILURE_CAUSE))
-                }
+                res(payload.data)
             }
 
             worker.addEventListener('message', handleMessage)
