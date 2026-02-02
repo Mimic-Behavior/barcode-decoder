@@ -10,7 +10,7 @@
     "homepage": "https://github.com/No-Deprecated-Dependencies/barcode-scanner",
     "repository": {
         "type": "git",
-        "url": "https://github.com/No-Deprecated-Dependencies/barcode-scanner.git"
+        "url": "git+https://github.com/No-Deprecated-Dependencies/barcode-scanner.git"
     },
     "license": "MIT",
     "author": "Aleksei Saenko",
