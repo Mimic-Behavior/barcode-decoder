@@ -203,25 +203,7 @@ async function createBarcodeScanner(
         canvas.width = state.video.videoWidth
         canvasContext.drawImage(state.video, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height)
 
-        const blob: Blob = await new Promise((res, rej) => {
-            canvas.toBlob(
-                (blob) => {
-                    if (blob) {
-                        res(blob)
-                    } else {
-                        rej(new Error('Failed to convert canvas to blob'))
-                    }
-                },
-                'image/jpeg',
-                0.9,
-            )
-        })
-
-        if (state.video.poster.startsWith('blob:')) {
-            URL.revokeObjectURL(state.video.poster)
-        }
-
-        state.video.poster = URL.createObjectURL(blob)
+        state.video.poster = canvas.toDataURL('image/jpeg', 0.9)
 
         if (state.video.srcObject instanceof MediaStream) {
             state.video.srcObject.getTracks().forEach((track) => track.stop())
@@ -286,10 +268,6 @@ async function createBarcodeScanner(
             state.video.srcObject.getTracks().forEach((track) => track.stop())
         }
 
-        if (state.video.poster.startsWith('blob:')) {
-            URL.revokeObjectURL(state.video.poster)
-        }
-
         state.isVideoActive = false
         state.isVideoPaused = false
         state.video.poster = ''
@@ -301,6 +279,7 @@ async function createBarcodeScanner(
     }
 
     return {
+        decode,
         destroy,
         pause,
         start,

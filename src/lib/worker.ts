@@ -7,7 +7,7 @@ import zxingUrl from 'zxing-wasm/reader/zxing_reader.wasm?url&no-inline'
 
 import type { DecodeRequest, DecodeResponse, Init } from './worker.types'
 
-import { isBarcodeDetectorAvailable } from './utils'
+import { isBarcodeDetectorAvailable } from './utils/is-barcode-detector-available'
 
 const worker = self as unknown as Worker
 
@@ -28,12 +28,16 @@ try {
     } else {
         prepareZXingModule({
             overrides: {
-                locateFile(url, scriptDirectory) {
-                    if (url.endsWith('.wasm')) {
-                        return zxingUrl
-                    }
+                instantiateWasm(imports, successCallback) {
+                    fetch(zxingUrl)
+                        .then((response) => response.arrayBuffer())
+                        .then((arrayBuffer) =>
+                            WebAssembly.instantiate(arrayBuffer, imports).then(({ instance }) =>
+                                successCallback(instance),
+                            ),
+                        )
 
-                    return scriptDirectory + url
+                    return {}
                 },
                 postRun: [
                     () => {
