@@ -11,7 +11,7 @@ export default defineConfig({
         },
         rollupOptions: {
             output: {
-                entryFileNames: '[name]-[hash].js',
+                entryFileNames: '[name].js',
             },
         },
     },
@@ -22,7 +22,7 @@ export default defineConfig({
         format: 'es',
         rollupOptions: {
             output: {
-                entryFileNames: '[name]-[hash].js',
+                entryFileNames: '[name].js',
             },
         },
     },
