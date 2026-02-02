@@ -22,6 +22,10 @@ export default defineConfig({
         format: 'es',
         rollupOptions: {
             output: {
+                assetFileNames(chunkInfo) {
+                    return `${path.basename(chunkInfo.names[0], path.extname(chunkInfo.names[0])).replace('_', '-')}.[ext]`
+                },
+                chunkFileNames: '[name].js',
                 entryFileNames: '[name].js',
             },
         },

@@ -78,6 +78,8 @@ if (video && videoContainer) {
                 await wait(400)
 
                 alert(`Barcode decoded: ${data}`)
+
+                await barcodeScanner.start()
             }
 
             resultValue.textContent = data

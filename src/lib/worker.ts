@@ -3,7 +3,7 @@ import {
     BarcodeDetector as BarcodeDetectorPonyfill,
     prepareZXingModule,
 } from 'barcode-detector/ponyfill'
-import zxingUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'
+import zxingUrl from 'zxing-wasm/reader/zxing_reader.wasm?url&no-inline'
 
 import type { DecodeRequest, DecodeResponse, Init } from './worker.types'
 
